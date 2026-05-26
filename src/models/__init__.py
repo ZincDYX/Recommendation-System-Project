@@ -1,2 +1,0 @@
-"""Recommendation model implementations."""
-

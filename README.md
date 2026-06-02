@@ -43,6 +43,12 @@ cd backend
 pip install -r requirements.txt
 ```
 
+## 脚本选择
+
+- Linux/macOS 服务器：优先使用 `backend/scripts/*.sh`。
+- Windows PowerShell：使用 `backend/scripts/*.ps1`。
+- Windows 上的 WSL 或 Git Bash：也可以运行 `.sh` 脚本。
+
 ## 快速开发训练
 
 先用小样本检查流程：
@@ -67,10 +73,20 @@ python -m src.train --data_dir ../rec_data/MovieLens --models popularity itemcf 
 .\backend\scripts\train_lightweight.ps1
 ```
 
+Linux/macOS：
+
+```bash
+bash backend/scripts/train_lightweight.sh
+```
+
 脚本也支持小样本检查：
 
 ```powershell
 .\backend\scripts\train_lightweight.ps1 -Datasets MovieLens -Models popularity -MaxTrainRows 5000 -MaxUsers 100
+```
+
+```bash
+bash backend/scripts/train_lightweight.sh --datasets MovieLens --models popularity --max-train-rows 5000 --max-users 100
 ```
 
 一键训练两个数据集的矩阵分解和深度模型：
@@ -79,10 +95,20 @@ python -m src.train --data_dir ../rec_data/MovieLens --models popularity itemcf 
 .\backend\scripts\train_deep.ps1
 ```
 
+Linux/macOS：
+
+```bash
+bash backend/scripts/train_deep.sh --device cuda
+```
+
 深度模型脚本也支持小样本检查：
 
 ```powershell
 .\backend\scripts\train_deep.ps1 -Datasets MovieLens -Models bpr_mf -Epochs 1 -MaxTrainSamples 10000 -MaxTrainRows 50000 -MaxUsers 1000
+```
+
+```bash
+bash backend/scripts/train_deep.sh --device cuda --datasets MovieLens --models bpr_mf --epochs 1 --max-train-samples 10000 --max-train-rows 50000 --max-users 1000
 ```
 
 训练全套模型：
@@ -129,10 +155,20 @@ python -m src.evaluate --data_dir ../rec_data/MovieLens --model_dir saved_models
 .\backend\scripts\evaluate_recommenders.ps1
 ```
 
+Linux/macOS：
+
+```bash
+bash backend/scripts/evaluate_recommenders.sh
+```
+
 评测脚本也支持小样本检查：
 
 ```powershell
 .\backend\scripts\evaluate_recommenders.ps1 -Datasets MovieLens -Models popularity -NegativeCounts 20 -PositiveThresholds 0 -MaxEvalUsers 100 -NoEnsemble
+```
+
+```bash
+bash backend/scripts/evaluate_recommenders.sh --datasets MovieLens --models popularity --negative-counts 20 --positive-thresholds 0 --max-eval-users 100 --no-ensemble
 ```
 
 ## 单用户推荐

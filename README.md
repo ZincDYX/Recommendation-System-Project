@@ -73,6 +73,18 @@ python -m src.train --data_dir ../rec_data/MovieLens --models popularity itemcf 
 .\backend\scripts\train_lightweight.ps1 -Datasets MovieLens -Models popularity -MaxTrainRows 5000 -MaxUsers 100
 ```
 
+一键训练两个数据集的矩阵分解和深度模型：
+
+```powershell
+.\backend\scripts\train_deep.ps1
+```
+
+深度模型脚本也支持小样本检查：
+
+```powershell
+.\backend\scripts\train_deep.ps1 -Datasets MovieLens -Models bpr_mf -Epochs 1 -MaxTrainSamples 10000 -MaxTrainRows 50000 -MaxUsers 1000
+```
+
 训练全套模型：
 
 ```bash

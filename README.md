@@ -171,6 +171,30 @@ bash backend/scripts/evaluate_recommenders.sh
 bash backend/scripts/evaluate_recommenders.sh --datasets MovieLens --models popularity --negative-counts 20 --positive-thresholds 0 --max-eval-users 100 --no-ensemble
 ```
 
+## 融合调参
+
+`src.tune_ensemble` 会读取已经训练好的模型，自动枚举多组融合权重，按目标指标排序，并把每组权重和指标写入 CSV。默认目标是 `NDCG@10`。
+如果不指定 `--output`，结果会自动写入 `results/tuning/` 下带时间戳的 CSV。
+
+```bash
+cd backend
+python -m src.tune_ensemble --data_dir ../rec_data/MovieLens --model_dir saved_models/MovieLens --num_negatives 100 --positive_threshold 4.0 --max_eval_users 1000 --grid_step 0.2 --output results/tuning/movielens_pos4_n100.csv
+```
+
+只使用轻量模型调参：
+
+```bash
+cd backend
+python -m src.tune_ensemble --data_dir ../rec_data/Movies_and_TV --model_dir saved_models/Movies_and_TV --models popularity itemcf content_tfidf --num_negatives 100 --positive_threshold 4.0 --max_eval_users 1000 --output results/tuning/movies_and_tv_lightweight_pos4_n100.csv
+```
+
+加入手动候选权重：
+
+```bash
+cd backend
+python -m src.tune_ensemble --data_dir ../rec_data/MovieLens --model_dir saved_models/MovieLens --candidate_weights popularity=0.15,itemcf=0.25,content_tfidf=0.10,bpr_mf=0.25,gru4rec=0.25 --candidate_weights popularity=0.10,itemcf=0.30,content_tfidf=0.05,bpr_mf=0.25,gru4rec=0.30 --output results/tuning/movielens_manual_candidates.csv
+```
+
 ## 单用户推荐
 
 ```bash

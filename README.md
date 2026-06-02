@@ -61,6 +61,18 @@ cd backend
 python -m src.train --data_dir ../rec_data/MovieLens --models popularity itemcf content_tfidf
 ```
 
+一键训练两个数据集的轻量模型：
+
+```powershell
+.\backend\scripts\train_lightweight.ps1
+```
+
+脚本也支持小样本检查：
+
+```powershell
+.\backend\scripts\train_lightweight.ps1 -Datasets MovieLens -Models popularity -MaxTrainRows 5000 -MaxUsers 100
+```
+
 训练全套模型：
 
 ```bash

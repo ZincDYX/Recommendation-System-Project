@@ -39,6 +39,7 @@ rec_data/
 ## 安装
 
 ```bash
+cd backend
 pip install -r requirements.txt
 ```
 
@@ -47,7 +48,8 @@ pip install -r requirements.txt
 先用小样本检查流程：
 
 ```bash
-python -m src.train --data_dir rec_data/MovieLens --max_train_rows 200000 --max_users 5000 --epochs 1 --max_train_samples 50000
+cd backend
+python -m src.train --data_dir ../rec_data/MovieLens --max_train_rows 200000 --max_users 5000 --epochs 1 --max_train_samples 50000
 ```
 
 完整训练时去掉 `--max_train_rows` 和 `--max_users`，并按机器性能调整 `--epochs`、`--max_train_samples`。
@@ -55,14 +57,16 @@ python -m src.train --data_dir rec_data/MovieLens --max_train_rows 200000 --max_
 只训练轻量模型：
 
 ```bash
-python -m src.train --data_dir rec_data/MovieLens --models popularity itemcf content_tfidf
+cd backend
+python -m src.train --data_dir ../rec_data/MovieLens --models popularity itemcf content_tfidf
 ```
 
 训练全套模型：
 
 ```bash
-python -m src.train --data_dir rec_data/MovieLens --models popularity itemcf content_tfidf bpr_mf gru4rec
-python -m src.train --data_dir rec_data/Movies_and_TV --models popularity itemcf content_tfidf bpr_mf gru4rec
+cd backend
+python -m src.train --data_dir ../rec_data/MovieLens --models popularity itemcf content_tfidf bpr_mf gru4rec
+python -m src.train --data_dir ../rec_data/Movies_and_TV --models popularity itemcf content_tfidf bpr_mf gru4rec
 ```
 
 ## 评测
@@ -70,32 +74,43 @@ python -m src.train --data_dir rec_data/Movies_and_TV --models popularity itemcf
 默认每个测试正例采样 100 个负例，报告 `HitRate/Recall`、`Precision`、`NDCG`、`MRR`。
 
 ```bash
-python -m src.evaluate --data_dir rec_data/MovieLens --model_dir saved_models/MovieLens --include_ensemble --output results/movielens_metrics.csv
+cd backend
+python -m src.evaluate --data_dir ../rec_data/MovieLens --model_dir saved_models/MovieLens --include_ensemble --output results/movielens_metrics.csv
+```
+
+指定融合模型权重：
+
+```bash
+cd backend
+python -m src.evaluate --data_dir ../rec_data/MovieLens --model_dir saved_models/MovieLens --include_ensemble --ensemble_weights popularity=0.15,itemcf=0.25,content_tfidf=0.10,bpr_mf=0.25,gru4rec=0.25 --output results/movielens_weighted_metrics.csv
 ```
 
 只评测高分正例：
 
 ```bash
-python -m src.evaluate --data_dir rec_data/MovieLens --model_dir saved_models/MovieLens --positive_threshold 4.0 --include_ensemble
+cd backend
+python -m src.evaluate --data_dir ../rec_data/MovieLens --model_dir saved_models/MovieLens --positive_threshold 4.0 --include_ensemble
 ```
 
 开发时限制评测用户数：
 
 ```bash
-python -m src.evaluate --data_dir rec_data/MovieLens --model_dir saved_models/MovieLens --max_eval_users 1000
+cd backend
+python -m src.evaluate --data_dir ../rec_data/MovieLens --model_dir saved_models/MovieLens --max_eval_users 1000
 ```
 
 ## 单用户推荐
 
 ```bash
-python -m src.recommend --data_dir rec_data/MovieLens --model_dir saved_models/MovieLens --model itemcf --user_id 1 --topk 10
+cd backend
+python -m src.recommend --data_dir ../rec_data/MovieLens --model_dir saved_models/MovieLens --model itemcf --user_id 1 --topk 10
 ```
 
 ## UI
 
 ```bash
+cd backend
 streamlit run app.py
 ```
 
 在侧边栏选择数据目录和模型目录，然后输入用户 ID 查看训练历史与推荐结果。
-

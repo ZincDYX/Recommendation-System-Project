@@ -6,6 +6,8 @@ from src.models.base import Recommender
 
 
 class WeightedEnsemble(Recommender):
+    """Combine heterogeneous recommender scores after per-model min-max normalization."""
+
     name = "ensemble"
 
     def __init__(self, models: list[Recommender], weights: dict[str, float] | None = None) -> None:
@@ -35,4 +37,3 @@ class WeightedEnsemble(Recommender):
                 normalized = 0.0 if denom <= 1e-12 else (score - min_score) / denom
                 combined[item_id] += weight * normalized
         return combined
-

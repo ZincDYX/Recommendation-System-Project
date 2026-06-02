@@ -123,6 +123,18 @@ cd backend
 python -m src.evaluate --data_dir ../rec_data/MovieLens --model_dir saved_models/MovieLens --max_eval_users 1000
 ```
 
+一键批量评测两个数据集：
+
+```powershell
+.\backend\scripts\evaluate_recommenders.ps1
+```
+
+评测脚本也支持小样本检查：
+
+```powershell
+.\backend\scripts\evaluate_recommenders.ps1 -Datasets MovieLens -Models popularity -NegativeCounts 20 -PositiveThresholds 0 -MaxEvalUsers 100 -NoEnsemble
+```
+
 ## 单用户推荐
 
 ```bash

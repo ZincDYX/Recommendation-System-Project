@@ -1,9 +1,8 @@
 import { useState } from 'react'
-import { products } from '../data/products'
 import CartItemCard from '../components/CartItemCard'
 import './Cart.css'
 
-function Cart() {
+function Cart({ items = [], onRemove }) {
   const [selectedIds, setSelectedIds] = useState([])
 
   function handleToggleSelect(id) {
@@ -15,19 +14,23 @@ function Cart() {
   }
 
   function handleRemove(id) {
-    console.log('remove item:', id)
-    // later: remove from cart state or backend
+    setSelectedIds((prev) => prev.filter((itemId) => itemId !== id))
+    onRemove?.(id)
   }
 
-  const totalPrice = products
+  const totalPrice = items
     .filter((item) => selectedIds.includes(item.id))
-    .reduce((sum, item) => sum + item.price, 0)
+    .reduce((sum, item) => sum + Number(item.price || 0), 0)
 
   return (
     <div className="cart-page">
       <h1>Shopping Cart</h1>
 
-      {products.map((item) => (
+      {items.length === 0 && (
+        <div className="empty-cart">No items have been added yet.</div>
+      )}
+
+      {items.map((item) => (
         <CartItemCard
           key={item.id}
           item={item}

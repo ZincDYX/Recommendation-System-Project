@@ -8,6 +8,7 @@ function CartItemCard({
   onRemove,
 }) {
   const navigate = useNavigate()
+  const title = String(item.name || item.title || item.item_id || item.id)
 
   return (
     <div className="cart-item-card">
@@ -15,11 +16,15 @@ function CartItemCard({
         className="cart-item-image"
         onClick={() => navigate(`/product/${item.id}`)}
       >
-        <img src={item.image} alt={item.name} />
+        {item.image ? (
+          <img src={item.image} alt={title} />
+        ) : (
+          <span>{title.slice(0, 2).toUpperCase()}</span>
+        )}
       </button>
 
       <div className="cart-item-info">
-        <h3>{item.name}</h3>
+        <h3>{title}</h3>
         <p>¥{item.price}</p>
       </div>
 

@@ -1,18 +1,68 @@
-const API_BASE_URL = "http://localhost:8000"
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
-export async function searchProducts(query) {
-  // Later: connect to backend API
-  // const response = await fetch(`${API_BASE_URL}/search?query=${query}`)
-  // return response.json()
+async function request(path, params = {}) {
+  const url = new URL(path, API_BASE_URL)
 
-  return {
-    results: []
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return
+    url.searchParams.set(key, value)
+  })
+
+  const response = await fetch(url)
+
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `Request failed: ${response.status}`)
   }
+
+  return response.json()
 }
 
-export async function getRecommendations() {
-  // Later: connect to recommendation backend
-  return {
-    results: []
-  }
+export function getDatasets() {
+  return request('/datasets')
+}
+
+export function getModels(dataset) {
+  return request('/models', { dataset })
+}
+
+export function getUsers(dataset, limit = 20, query = '') {
+  return request('/users', { dataset, limit, query })
+}
+
+export function getHistory(dataset, userId, limit = 20) {
+  return request('/history', { dataset, user_id: userId, limit })
+}
+
+export function searchProducts(dataset, query, limit = 20) {
+  return request('/search', { dataset, query, limit })
+}
+
+export function getRecommendations({
+  dataset,
+  userId,
+  model,
+  topk = 12,
+  query = '',
+  contextItems = [],
+  weights = '',
+}) {
+  return request('/recommend', {
+    dataset,
+    user_id: userId,
+    model,
+    topk,
+    query,
+    context_items: contextItems.join(','),
+    weights,
+  })
+}
+
+export function getMetrics(dataset, label = 'pos4', negativeCount = 100, k = 10) {
+  return request('/metrics', {
+    dataset,
+    label,
+    negative_count: negativeCount,
+    k,
+  })
 }

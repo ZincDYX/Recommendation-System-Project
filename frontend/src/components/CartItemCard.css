@@ -18,6 +18,8 @@
   overflow: hidden;
   cursor: pointer;
   background: #f3f4f6;
+  color: #ef4444;
+  font-weight: 800;
 }
 
 .cart-item-image img {

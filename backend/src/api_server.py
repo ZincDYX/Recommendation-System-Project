@@ -1,0 +1,284 @@
+from __future__ import annotations
+
+import csv
+import hashlib
+import os
+import re
+from functools import lru_cache
+from pathlib import Path
+from typing import Any
+
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+
+from src.data import Histories, load_dataset_dir, seen_items_for_user
+from src.evaluate import parse_ensemble_weights
+from src.model_io import load_model, model_path
+from src.model_registry import AVAILABLE_MODELS
+from src.models.ensemble import WeightedEnsemble
+
+
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = BACKEND_ROOT.parent
+DATA_ROOT = Path(os.getenv("RECSYS_DATA_ROOT", PROJECT_ROOT / "rec_data"))
+MODEL_ROOT = Path(os.getenv("RECSYS_MODEL_ROOT", BACKEND_ROOT / "saved_models"))
+RESULTS_ROOT = Path(os.getenv("RECSYS_RESULTS_ROOT", BACKEND_ROOT / "results"))
+
+app = FastAPI(title="Recommendation System API")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.getenv("RECSYS_CORS_ORIGINS", "*").split(","),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+def dataset_dir(dataset: str) -> Path:
+    path = DATA_ROOT / dataset
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Unknown dataset: {dataset}")
+    return path
+
+
+def dataset_model_dir(dataset: str) -> Path:
+    return MODEL_ROOT / dataset
+
+
+@lru_cache(maxsize=8)
+def cached_dataset(data_dir: str):
+    return load_dataset_dir(data_dir)
+
+
+@lru_cache(maxsize=64)
+def cached_model(path: str):
+    return load_model(path)
+
+
+def load_dataset(dataset: str):
+    return cached_dataset(str(dataset_dir(dataset)))
+
+
+def available_base_models(dataset: str) -> list[str]:
+    model_dir = dataset_model_dir(dataset)
+    if not model_dir.exists():
+        return []
+    existing = {path.stem for path in model_dir.glob("*.pkl")}
+    return [name for name in AVAILABLE_MODELS if name in existing]
+
+
+def load_recommender(dataset: str, model_name: str, raw_weights: str | None = None):
+    model_dir = dataset_model_dir(dataset)
+    base_model_names = available_base_models(dataset)
+    if model_name == "ensemble":
+        if len(base_model_names) < 2:
+            raise HTTPException(status_code=404, detail="At least two trained models are required for ensemble.")
+        weights = parse_ensemble_weights(raw_weights)
+        models = [cached_model(str(model_path(model_dir, name))) for name in base_model_names]
+        return WeightedEnsemble(models, weights=weights)
+    if model_name not in base_model_names:
+        raise HTTPException(status_code=404, detail=f"Model is not available: {model_name}")
+    return cached_model(str(model_path(model_dir, model_name)))
+
+
+def tokenize(text: str) -> set[str]:
+    return {token for token in re.findall(r"[A-Za-z0-9]+", text.lower()) if len(token) >= 2}
+
+
+def parse_csv_list(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return [part.strip() for part in value.split(",") if part.strip()]
+
+
+def stable_price(item_id: str) -> int:
+    digest = hashlib.md5(item_id.encode("utf-8"), usedforsecurity=False).hexdigest()
+    return 20 + int(digest[:4], 16) % 480
+
+
+def item_payload(dataset: str, item_id: str, item_info: dict[str, str], score: float | None = None) -> dict[str, Any]:
+    title = item_info.get(item_id) or f"Item {item_id}"
+    payload: dict[str, Any] = {
+        "id": item_id,
+        "item_id": item_id,
+        "name": title,
+        "title": title,
+        "category": dataset,
+        "price": stable_price(item_id),
+        "description": f"{dataset} item {item_id}",
+        "image": "",
+    }
+    if score is not None:
+        payload["score"] = score
+    return payload
+
+
+def recent_history(train: Histories, user_id: str, limit: int):
+    return train.get(user_id, [])[-limit:]
+
+
+def search_item_ids(item_info: dict[str, str], query: str, limit: int) -> list[str]:
+    query_tokens = tokenize(query)
+    if not query_tokens:
+        return []
+    scored = []
+    for item_id, title in item_info.items():
+        title_tokens = tokenize(title)
+        overlap = len(query_tokens & title_tokens)
+        if overlap:
+            scored.append((overlap, title.lower().find(query.lower()), item_id))
+    scored.sort(key=lambda row: (-row[0], row[1] if row[1] >= 0 else 9999, row[2]))
+    return [item_id for _, _, item_id in scored[:limit]]
+
+
+def context_tokens(item_info: dict[str, str], query: str | None, context_items: list[str]) -> set[str]:
+    tokens = tokenize(query or "")
+    for item_id in context_items:
+        tokens.update(tokenize(item_info.get(item_id, "")))
+    return tokens
+
+
+def rerank_with_context(
+    recommendations: list[tuple[str, float]],
+    item_info: dict[str, str],
+    tokens: set[str],
+) -> list[tuple[str, float]]:
+    if not tokens:
+        return recommendations
+    reranked = []
+    for item_id, score in recommendations:
+        overlap = len(tokens & tokenize(item_info.get(item_id, "")))
+        reranked.append((item_id, score + overlap * 0.05))
+    return sorted(reranked, key=lambda row: (-row[1], row[0]))
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/datasets")
+def datasets() -> dict[str, list[str]]:
+    if not DATA_ROOT.exists():
+        return {"datasets": []}
+    names = [path.name for path in DATA_ROOT.iterdir() if (path / "train.txt").exists()]
+    return {"datasets": sorted(names)}
+
+
+@app.get("/models")
+def models(dataset: str = Query("MovieLens")) -> dict[str, list[str]]:
+    base_models = available_base_models(dataset)
+    model_names = ["ensemble", *base_models] if len(base_models) >= 2 else base_models
+    return {"models": model_names}
+
+
+@app.get("/users")
+def users(dataset: str = Query("MovieLens"), limit: int = Query(20, ge=1, le=500), query: str = ""):
+    train, _, _, _, _ = load_dataset(dataset)
+    user_ids = list(train.keys())
+    if query:
+        user_ids = [user_id for user_id in user_ids if query in user_id]
+    return {
+        "users": [
+            {"user_id": user_id, "history_count": len(train[user_id])}
+            for user_id in user_ids[:limit]
+        ]
+    }
+
+
+@app.get("/history")
+def history(dataset: str = Query("MovieLens"), user_id: str = Query(...), limit: int = Query(20, ge=1, le=200)):
+    train, _, _, item_info, _ = load_dataset(dataset)
+    rows = recent_history(train, user_id, limit)
+    return {
+        "dataset": dataset,
+        "user_id": user_id,
+        "history": [
+            {
+                **item_payload(dataset, item_id, item_info),
+                "rating": rating,
+                "timestamp": timestamp,
+            }
+            for _, item_id, rating, timestamp in rows
+        ],
+    }
+
+
+@app.get("/search")
+def search(dataset: str = Query("MovieLens"), query: str = Query(""), limit: int = Query(20, ge=1, le=100)):
+    _, _, _, item_info, _ = load_dataset(dataset)
+    item_ids = search_item_ids(item_info, query, limit)
+    return {"results": [item_payload(dataset, item_id, item_info) for item_id in item_ids]}
+
+
+@app.get("/recommend")
+def recommend(
+    dataset: str = Query("MovieLens"),
+    user_id: str = Query(...),
+    model: str = Query("ensemble"),
+    topk: int = Query(10, ge=1, le=50),
+    query: str = "",
+    context_items: str | None = None,
+    weights: str | None = None,
+):
+    train, valid, _, item_info, _ = load_dataset(dataset)
+    recommender = load_recommender(dataset, model, raw_weights=weights)
+    context_item_ids = parse_csv_list(context_items)
+    excluded = seen_items_for_user(train, valid, user_id=user_id)
+    excluded.update(context_item_ids)
+
+    candidate_items = None
+    if query:
+        candidate_items = search_item_ids(item_info, query, limit=max(topk * 20, 100))
+        if not candidate_items:
+            candidate_items = None
+
+    recs = recommender.recommend(
+        user_id,
+        k=max(topk * 5, topk),
+        exclude_items=excluded,
+        candidate_items=candidate_items,
+    )
+    recs = rerank_with_context(recs, item_info, context_tokens(item_info, query, context_item_ids))
+    recs = recs[:topk]
+    return {
+        "dataset": dataset,
+        "user_id": user_id,
+        "model": model,
+        "recommendations": [
+            {"rank": rank, **item_payload(dataset, item_id, item_info, score)}
+            for rank, (item_id, score) in enumerate(recs, start=1)
+        ],
+    }
+
+
+@app.get("/metrics")
+def metrics(
+    dataset: str = Query("MovieLens"),
+    label: str = Query("pos4", pattern="^(all|pos4)$"),
+    negative_count: int = Query(100, ge=1),
+    k: int = Query(10, ge=1),
+):
+    dataset_slug = dataset.lower()
+    path = RESULTS_ROOT / f"{dataset_slug}_{label}_n{negative_count}.csv"
+    if not path.exists():
+        return {"metrics": [], "path": str(path)}
+    rows = []
+    with path.open("r", encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if int(row["k"]) != k:
+                continue
+            rows.append(
+                {
+                    "model": row["model"],
+                    "k": k,
+                    "hit": float(row["hit"]),
+                    "precision": float(row["precision"]),
+                    "recall": float(row["recall"]),
+                    "ndcg": float(row["ndcg"]),
+                    "mrr": float(row["mrr"]),
+                }
+            )
+    rows.sort(key=lambda row: row["ndcg"], reverse=True)
+    return {"metrics": rows, "path": str(path)}

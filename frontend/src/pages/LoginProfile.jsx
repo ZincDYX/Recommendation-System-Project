@@ -1,14 +1,8 @@
 import { useState } from 'react'
 import './LoginProfile.css'
 
-function LoginProfile() {
+function LoginProfile({ profile, setProfile }) {
   const [isEditing, setIsEditing] = useState(false)
-
-  const [profile, setProfile] = useState({
-    name: 'Guest User',
-    address: 'Beijing, China',
-    avatar: '',
-  })
 
   function handleChange(event) {
     const { name, value } = event.target
@@ -21,9 +15,6 @@ function LoginProfile() {
 
   function handleSave() {
     setIsEditing(false)
-
-    // Later: call backend API here
-    // await updateUserProfile(profile)
   }
 
   function handleAvatarChange(event) {
@@ -31,11 +22,9 @@ function LoginProfile() {
 
     if (!file) return
 
-    const imageUrl = URL.createObjectURL(file)
-
     setProfile({
-        ...profile,
-        avatar: imageUrl,
+      ...profile,
+      avatar: URL.createObjectURL(file),
     })
   }
 
@@ -44,23 +33,25 @@ function LoginProfile() {
       <section className="profile-card">
         <div className="profile-header">
           <div className="avatar-area">
-          <div className="profile-avatar">
+            <div className="profile-avatar">
               {profile.avatar ? (
-              <img src={profile.avatar}
-                   alt="profile"/>) : (<span>👤</span>)}
-          </div>
+                <img src={profile.avatar} alt="profile" />
+              ) : (
+                <span>👤</span>
+              )}
+            </div>
 
-          {isEditing && (
-            <label className="change-avatar-btn">
-              Change photo
-            <input
-                type="file"
-                accept="image/*"
-                onChange={handleAvatarChange}
-                hidden
-            />
-            </label>
-          )}
+            {isEditing && (
+              <label className="change-avatar-btn">
+                Change photo
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarChange}
+                  hidden
+                />
+              </label>
+            )}
           </div>
 
           <div className="profile-main">
@@ -75,7 +66,7 @@ function LoginProfile() {
               <h2>{profile.name}</h2>
             )}
 
-            <p>Not connected to backend yet</p>
+            <p>Recommendation signals are used on the storefront and experiment views.</p>
           </div>
 
           <button

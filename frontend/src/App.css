@@ -70,6 +70,16 @@ body {
   cursor: pointer;
 }
 
+.mode-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 0 18px;
+  background: #111827;
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .category-scroll {
   display: flex;
   gap: 12px;
@@ -185,6 +195,114 @@ body {
   margin-bottom: 16px;
   color: #64748b;
   font-weight: 700;
+}
+
+.experiment-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.experiment-panel {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(140px, 1fr));
+  gap: 16px;
+  background: white;
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+.experiment-panel label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.experiment-panel input,
+.experiment-panel select {
+  min-width: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: #111827;
+  font: inherit;
+}
+
+.run-btn {
+  align-self: end;
+  min-height: 41px;
+  border: none;
+  border-radius: 999px;
+  background: #ef4444;
+  color: white;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.run-btn:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.experiment-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.experiment-card {
+  background: white;
+  border-radius: 18px;
+  padding: 22px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+.experiment-card h2 {
+  margin: 0 0 16px;
+  font-size: 20px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table-wrap th,
+.table-wrap td {
+  border-bottom: 1px solid #e5e7eb;
+  padding: 10px 8px;
+  text-align: left;
+  font-size: 13px;
+  vertical-align: top;
+}
+
+.table-wrap th {
+  color: #64748b;
+  font-weight: 800;
+}
+
+.empty-table {
+  color: #94a3b8;
+  margin: 12px 0 0;
+}
+
+@media (max-width: 920px) {
+  .experiment-panel,
+  .experiment-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .recommendation-toolbar {
+    flex-direction: column;
+  }
 }
 
 .hero {

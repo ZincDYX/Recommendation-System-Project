@@ -266,6 +266,27 @@ body {
   font-size: 20px;
 }
 
+.metric-guide {
+  padding-bottom: 18px;
+}
+
+.metric-guide-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 18px;
+}
+
+.metric-guide-list p {
+  margin: 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.metric-guide-list strong {
+  color: #111827;
+}
+
 .table-wrap {
   overflow-x: auto;
 }
@@ -289,6 +310,14 @@ body {
   font-weight: 800;
 }
 
+.reason-cell {
+  min-width: 220px;
+  max-width: 360px;
+  color: #334155;
+  line-height: 1.45;
+  white-space: normal;
+}
+
 .empty-table {
   color: #94a3b8;
   margin: 12px 0 0;
@@ -296,7 +325,8 @@ body {
 
 @media (max-width: 920px) {
   .experiment-panel,
-  .experiment-grid {
+  .experiment-grid,
+  .metric-guide-list {
     grid-template-columns: 1fr;
   }
 

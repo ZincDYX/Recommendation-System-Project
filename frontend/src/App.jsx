@@ -374,6 +374,17 @@ function App() {
                     </button>
                   </form>
 
+                  <section className="experiment-card metric-guide">
+                    <h2>数值说明</h2>
+                    <div className="metric-guide-list">
+                      <p><strong>Algorithm score</strong>：当前算法给出的排序分数，分数越高表示在同一次请求、同一算法下排序越靠前；它不是点击概率。</p>
+                      <p><strong>Hit@10 / Recall@10</strong>：当前 leave-one-out 评测中，Top-10 命中唯一正例即为 1，否则为 0，因此两者数值相同。</p>
+                      <p><strong>Precision@10</strong>：Top-10 中正例占比；当前协议每个样本只有 1 个正例，所以理论上限是 0.1。</p>
+                      <p><strong>NDCG@10</strong>：衡量相关物品是否排在更靠前的位置，越高说明排序质量越好。</p>
+                      <p><strong>MRR@10</strong>：关注第一个相关结果出现的位置，越靠前分数越高。</p>
+                    </div>
+                  </section>
+
                   <div className="experiment-grid">
                     <section className="experiment-card">
                       <h2>Training History</h2>
@@ -411,7 +422,8 @@ function App() {
                               <th>Rank</th>
                               <th>Item</th>
                               <th>Title</th>
-                              <th>Score</th>
+                              <th>Algorithm Score</th>
+                              <th>推荐理由</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -420,7 +432,8 @@ function App() {
                                 <td>{item.rank}</td>
                                 <td>{item.item_id}</td>
                                 <td>{item.title || item.name}</td>
-                                <td>{formatMetric(item.score)}</td>
+                                <td>{item.score_label || formatMetric(item.score)}</td>
+                                <td className="reason-cell">{item.reason || '暂无推荐理由'}</td>
                               </tr>
                             ))}
                           </tbody>

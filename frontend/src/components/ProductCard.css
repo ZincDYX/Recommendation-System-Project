@@ -58,6 +58,13 @@
   font-size: 12px;
 }
 
+.product-reason {
+  margin: -6px 0 16px;
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .product-bottom {
   display: flex;
   align-items: center;

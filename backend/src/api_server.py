@@ -162,6 +162,46 @@ def rerank_with_context(
     return sorted(reranked, key=lambda row: (-row[1], row[0]))
 
 
+def model_reason(model_name: str) -> str:
+    reasons = {
+        "popularity": "该物品在训练集中整体热度较高，适合作为热门推荐结果。",
+        "itemcf": "基于物品协同过滤，该物品与用户历史交互物品存在相似的共现模式。",
+        "content_tfidf": "基于内容 TF-IDF，该物品标题内容与用户历史兴趣更接近。",
+        "bpr_mf": "BPR 矩阵分解模型预测该用户对该物品的隐式偏好得分较高。",
+        "gru4rec": "GRU4Rec 根据用户近期行为序列预测该物品可能符合下一步兴趣。",
+        "ensemble": "融合模型综合了热门度、协同过滤、内容相似和深度模型信号后给出较高排序。",
+    }
+    return reasons.get(model_name, "该物品在当前算法排序中得分较高，因此被推荐。")
+
+
+def explanation_for_item(
+    model_name: str,
+    item_id: str,
+    item_info: dict[str, str],
+    train: Histories,
+    user_id: str,
+    query: str | None,
+    context_item_ids: list[str],
+) -> str:
+    """Build a lightweight display explanation for one recommendation."""
+    title_tokens = tokenize(item_info.get(item_id, ""))
+    query_value = (query or "").strip()
+    if query_value and title_tokens & tokenize(query_value):
+        return f"该结果与当前搜索词“{query_value}”在标题内容上匹配，因此被优先展示。"
+
+    for context_item_id in context_item_ids:
+        context_title = item_info.get(context_item_id, "")
+        if title_tokens & tokenize(context_title):
+            return f"该结果与你加入购物车或作为会话信号的物品“{context_title or context_item_id}”具有相似标题特征。"
+
+    for _, history_item_id, _, _ in reversed(recent_history(train, user_id, 10)):
+        history_title = item_info.get(history_item_id, "")
+        if title_tokens & tokenize(history_title):
+            return f"该结果与用户近期历史行为中的“{history_title or history_item_id}”存在内容相似性。"
+
+    return model_reason(model_name)
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -257,7 +297,20 @@ def recommend(
         "user_id": user_id,
         "model": model,
         "recommendations": [
-            {"rank": rank, **item_payload(dataset, item_id, item_info, score)}
+            {
+                "rank": rank,
+                **item_payload(dataset, item_id, item_info, score),
+                "score_label": f"Algorithm score: {score:.4f}",
+                "reason": explanation_for_item(
+                    model_name=model,
+                    item_id=item_id,
+                    item_info=item_info,
+                    train=train,
+                    user_id=user_id,
+                    query=query,
+                    context_item_ids=context_item_ids,
+                ),
+            }
             for rank, (item_id, score) in enumerate(recs, start=1)
         ],
     }

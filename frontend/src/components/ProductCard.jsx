@@ -23,7 +23,12 @@ function ProductCard({ product, onAdd }) {
         <h3 className="product-name">{title}</h3>
         <p className="product-desc">{product.description}</p>
         {product.score !== undefined && (
-          <p className="product-score">Score {Number(product.score).toFixed(4)}</p>
+          <p className="product-score">
+            {product.score_label || `Algorithm score: ${Number(product.score).toFixed(4)}`}
+          </p>
+        )}
+        {product.reason && (
+          <p className="product-reason">{product.reason}</p>
         )}
 
         <div className="product-bottom">

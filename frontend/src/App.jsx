@@ -33,6 +33,7 @@ function formatMetric(value) {
 }
 
 function App() {
+  // Store mode keeps the ecommerce shell; experiment mode exposes model details.
   const [mode, setMode] = useState('store')
   const [selectedCategory, setSelectedCategory] = useState('Recommended')
   const [profile, setProfile] = useState({
@@ -63,6 +64,7 @@ function App() {
   const navigate = useNavigate()
 
   useEffect(() => {
+    // Load the first real dataset user for an immediately usable demo.
     let isMounted = true
 
     Promise.all([
@@ -88,6 +90,7 @@ function App() {
   }, [])
 
   useEffect(() => {
+    // Refresh experiment controls whenever the selected dataset changes.
     let isMounted = true
 
     Promise.all([
@@ -114,6 +117,7 @@ function App() {
   }, [experimentDataset])
 
   useEffect(() => {
+    // Storefront recommendations react to search text and cart context.
     if (!userId) return
 
     let isMounted = true
@@ -153,6 +157,7 @@ function App() {
   }
 
   function handleAddToCart(product) {
+    // Adding a product is treated as a session signal for reranking.
     const itemId = product.item_id || product.id
     setCartItems((prev) => {
       if (prev.some((item) => item.id === product.id)) return prev
@@ -171,6 +176,7 @@ function App() {
   }
 
   function handleRunExperiment(event) {
+    // Experiment mode shows history and recommendations for a chosen real user.
     event.preventDefault()
     if (!experimentUserId) {
       setExperimentMessage('Enter a user ID before running recommendations.')

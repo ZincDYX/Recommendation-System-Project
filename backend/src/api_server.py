@@ -18,6 +18,8 @@ from src.model_registry import AVAILABLE_MODELS
 from src.models.ensemble import WeightedEnsemble
 
 
+# Default paths match the repository layout; environment variables make server
+# deployment on lab machines possible without editing source code.
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = BACKEND_ROOT.parent
 DATA_ROOT = Path(os.getenv("RECSYS_DATA_ROOT", PROJECT_ROOT / "rec_data"))
@@ -47,11 +49,13 @@ def dataset_model_dir(dataset: str) -> Path:
 
 @lru_cache(maxsize=8)
 def cached_dataset(data_dir: str):
+    """Load a dataset once per process and reuse it across API calls."""
     return load_dataset_dir(data_dir)
 
 
 @lru_cache(maxsize=64)
 def cached_model(path: str):
+    """Load trained pickle models lazily and keep them in memory."""
     return load_model(path)
 
 
@@ -68,6 +72,7 @@ def available_base_models(dataset: str) -> list[str]:
 
 
 def load_recommender(dataset: str, model_name: str, raw_weights: str | None = None):
+    """Resolve a single trained model or build an in-memory weighted ensemble."""
     model_dir = dataset_model_dir(dataset)
     base_model_names = available_base_models(dataset)
     if model_name == "ensemble":
@@ -92,11 +97,13 @@ def parse_csv_list(value: str | None) -> list[str]:
 
 
 def stable_price(item_id: str) -> int:
+    """Generate deterministic display prices for dataset items without prices."""
     digest = hashlib.md5(item_id.encode("utf-8"), usedforsecurity=False).hexdigest()
     return 20 + int(digest[:4], 16) % 480
 
 
 def item_payload(dataset: str, item_id: str, item_info: dict[str, str], score: float | None = None) -> dict[str, Any]:
+    """Convert a dataset item into the product shape expected by the frontend."""
     title = item_info.get(item_id) or f"Item {item_id}"
     payload: dict[str, Any] = {
         "id": item_id,
@@ -118,6 +125,7 @@ def recent_history(train: Histories, user_id: str, limit: int):
 
 
 def search_item_ids(item_info: dict[str, str], query: str, limit: int) -> list[str]:
+    """Find items whose titles share tokens with the search query."""
     query_tokens = tokenize(query)
     if not query_tokens:
         return []
@@ -132,6 +140,7 @@ def search_item_ids(item_info: dict[str, str], query: str, limit: int) -> list[s
 
 
 def context_tokens(item_info: dict[str, str], query: str | None, context_items: list[str]) -> set[str]:
+    """Collect lightweight session context from search text and cart items."""
     tokens = tokenize(query or "")
     for item_id in context_items:
         tokens.update(tokenize(item_info.get(item_id, "")))
@@ -143,6 +152,7 @@ def rerank_with_context(
     item_info: dict[str, str],
     tokens: set[str],
 ) -> list[tuple[str, float]]:
+    """Boost recommendations that match the current search/cart context."""
     if not tokens:
         return recommendations
     reranked = []
@@ -221,6 +231,7 @@ def recommend(
     context_items: str | None = None,
     weights: str | None = None,
 ):
+    """Return Top-K recommendations for one user and optional session context."""
     train, valid, _, item_info, _ = load_dataset(dataset)
     recommender = load_recommender(dataset, model, raw_weights=weights)
     context_item_ids = parse_csv_list(context_items)
@@ -259,6 +270,7 @@ def metrics(
     negative_count: int = Query(100, ge=1),
     k: int = Query(10, ge=1),
 ):
+    """Expose saved offline metrics, including precision and recall, to the UI."""
     dataset_slug = dataset.lower()
     path = RESULTS_ROOT / f"{dataset_slug}_{label}_n{negative_count}.csv"
     if not path.exists():

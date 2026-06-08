@@ -1,6 +1,7 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 async function request(path, params = {}) {
+  // Centralize query-string handling so components only pass domain parameters.
   const url = new URL(path, API_BASE_URL)
 
   Object.entries(params).forEach(([key, value]) => {
@@ -47,6 +48,7 @@ export function getRecommendations({
   contextItems = [],
   weights = '',
 }) {
+  // contextItems contains session signals from search/cart actions.
   return request('/recommend', {
     dataset,
     user_id: userId,

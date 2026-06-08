@@ -55,6 +55,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def iter_test_cases(test, positive_threshold: float):
+    """Yield evaluation targets that satisfy the chosen positive-label rule."""
     for user_id, rows in test.items():
         for _, item_id, rating, _ in rows:
             if rating >= positive_threshold:
@@ -62,12 +63,19 @@ def iter_test_cases(test, positive_threshold: float):
 
 
 def evaluate_model(model, train, valid, test_cases, all_items, ks, num_negatives, rng):
-    """Evaluate one model with sampled negatives for leave-one-out ranking."""
+    """Evaluate one model with sampled-negative leave-one-out ranking.
+
+    Each test target is ranked against randomly sampled negatives. Items from
+    train/valid history are removed so the model is not rewarded for recommending
+    products the user has already consumed.
+    """
     max_k = max(ks)
     item_pool = list(all_items)
     metric_rows_by_k = {k: [] for k in ks}
     for user_id, target_item in test_cases:
         seen = seen_items_for_user(train, valid, user_id=user_id)
+
+        # Negative candidates must not include previously seen items or the target.
         excluded_for_sampling = set(seen)
         excluded_for_sampling.add(target_item)
         candidates = [target_item]
@@ -77,6 +85,8 @@ def evaluate_model(model, train, valid, test_cases, all_items, ks, num_negatives
             attempts += 1
             if neg not in excluded_for_sampling and neg not in candidates:
                 candidates.append(neg)
+
+        # The target stays rankable, while known history is filtered out.
         exclude_for_ranking = set(seen)
         exclude_for_ranking.discard(target_item)
         ranked = [

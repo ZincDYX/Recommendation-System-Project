@@ -1,6 +1,6 @@
 # Personalized Recommendation System
 
-这是“个性化推荐系统”大作业的初版代码框架，包含数据读取、多个推荐算法、Top-N 评测、命令行推荐和 Streamlit UI。
+这是“个性化推荐系统”大作业代码框架，包含数据读取、多个推荐算法、Top-N 评测、命令行推荐、FastAPI 推荐接口、React 前端和 Streamlit 备用 UI。
 代码默认支持 sampled leave-one-out，并允许用 `--positive_threshold` 切换“所有测试交互”与“高分正例”两种设置。
 
 ## 已实现算法
@@ -121,7 +121,7 @@ python -m src.train --data_dir ../rec_data/Movies_and_TV --models popularity ite
 
 ## 评测
 
-默认每个测试正例采样 100 个负例，报告 `HitRate/Recall`、`Precision`、`NDCG`、`MRR`。
+默认每个测试正例采样 100 个负例，报告 `HitRate`、`Precision`、`Recall`、`NDCG`、`MRR`。报告主表建议使用 `Hit@10`、`Precision@10`、`Recall@10`、`NDCG@10`、`MRR@10`。
 
 ```bash
 cd backend
@@ -202,7 +202,49 @@ cd backend
 python -m src.recommend --data_dir ../rec_data/MovieLens --model_dir saved_models/MovieLens --model itemcf --user_id 1 --topk 10
 ```
 
-## UI
+## API 和 React 前端
+
+React 前端包含两种模式：
+
+- Store mode：保留电商页面结构，搜索或加入购物车后刷新首页推荐。
+- Experiment mode：选择数据集、真实用户 ID 和算法，展示训练历史、Top-K 推荐和离线指标。
+
+先启动后端 API：
+
+```bash
+cd backend
+uvicorn src.api_server:app --reload --host 127.0.0.1 --port 8000
+```
+
+再启动前端：
+
+```bash
+cd frontend
+corepack pnpm install
+corepack pnpm dev
+```
+
+如需修改 API 地址：
+
+```bash
+VITE_API_BASE_URL=http://localhost:8000 corepack pnpm dev
+```
+
+API 默认读取：
+
+```text
+rec_data/
+backend/saved_models/
+backend/results/
+```
+
+也可以用环境变量覆盖：
+
+```bash
+RECSYS_DATA_ROOT=/path/to/rec_data RECSYS_MODEL_ROOT=/path/to/saved_models RECSYS_RESULTS_ROOT=/path/to/results uvicorn src.api_server:app --host 0.0.0.0 --port 8000
+```
+
+## Streamlit 备用 UI
 
 ```bash
 cd backend

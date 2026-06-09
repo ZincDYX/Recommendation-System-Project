@@ -358,13 +358,6 @@ body {
   white-space: normal;
 }
 
-.metric-status {
-  margin: -4px 0 18px;
-  color: #64748b;
-  font-size: 13px;
-  line-height: 1.55;
-}
-
 .dataset-summary + .dataset-summary {
   margin-top: 28px;
 }

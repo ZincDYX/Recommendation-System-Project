@@ -110,13 +110,3 @@ export function getMetrics(dataset, label = 'pos4', negativeCount = 100, k = 10)
     k,
   })
 }
-
-export function getUserMetrics(dataset, userId, label = 'pos4', negativeCount = 100, k = 10) {
-  return request('/user_metrics', {
-    dataset,
-    user_id: userId,
-    label,
-    negative_count: negativeCount,
-    k,
-  })
-}

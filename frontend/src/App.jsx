@@ -29,7 +29,6 @@ import {
   getRecommendations,
   getSessionRecommendations,
   getUser,
-  getUserMetrics,
   getUsers,
 } from './api/api'
 
@@ -182,7 +181,6 @@ function App() {
   const [historyRows, setHistoryRows] = useState([])
   const [experimentRecommendations, setExperimentRecommendations] = useState([])
   const [metricRows, setMetricRows] = useState([])
-  const [metricMessage, setMetricMessage] = useState('Run a recommendation to compute user-specific offline metrics.')
   const [overallMetricRows, setOverallMetricRows] = useState({})
   const [experimentMessage, setExperimentMessage] = useState('Load a real dataset user to inspect recommendations.')
   const [experimentLoading, setExperimentLoading] = useState(false)
@@ -229,8 +227,9 @@ function App() {
     Promise.all([
       getModels(experimentDataset),
       getUsers(experimentDataset, 1),
+      getMetrics(experimentDataset, 'pos4', 100, 10),
     ])
-      .then(([modelData, userData]) => {
+      .then(([modelData, userData, metricData]) => {
         if (!isMounted) return
         const modelNames = modelData.models || []
         const datasetSamples = SAMPLE_USERS[experimentDataset] || []
@@ -245,8 +244,7 @@ function App() {
             ? profile.userId
             : datasetSamples[0]?.userId || userData.users?.[0]?.user_id || ''
         )
-        setMetricRows([])
-        setMetricMessage('Run a recommendation to compute user-specific offline metrics.')
+        setMetricRows(metricData.metrics || [])
       })
       .catch(() => {
         if (!isMounted) return
@@ -559,8 +557,6 @@ function App() {
       setExperimentUserId('')
       setHistoryRows([])
       setExperimentRecommendations([])
-      setMetricRows([])
-      setMetricMessage('tester has no dataset test cases for offline metrics.')
       setExperimentMessage('tester has no dataset history. Use Store actions to create session context.')
       setLoginMessage('Logged in as tester. This account has no dataset history.')
       setLoginLoading(false)
@@ -583,8 +579,6 @@ function App() {
         setExperimentUserId(account.user_id)
         setHistoryRows([])
         setExperimentRecommendations([])
-        setMetricRows([])
-        setMetricMessage('Run a recommendation to compute user-specific offline metrics.')
         setExperimentMessage(`Logged in dataset user ${account.user_id}. Run recommendations to inspect this user.`)
         setLoginMessage(`Logged in as ${account.user_id}.`)
       })
@@ -609,8 +603,6 @@ function App() {
     setExperimentUserId('')
     setHistoryRows([])
     setExperimentRecommendations([])
-    setMetricRows([])
-    setMetricMessage('Run a recommendation to compute user-specific offline metrics.')
     setLoginMessage('Use a dataset user ID with password 0, or tester / 0 for an empty account.')
   }
 
@@ -619,8 +611,6 @@ function App() {
     if (experimentModels.includes(DEFAULT_MODEL)) {
       setExperimentModel(DEFAULT_MODEL)
     }
-    setMetricRows([])
-    setMetricMessage('Run a recommendation to compute user-specific offline metrics.')
     setExperimentMessage(`Selected sample user ${sample.userId}. Run recommendations to inspect this user.`)
   }
 
@@ -650,20 +640,6 @@ function App() {
         setHistoryRows(historyData.history || [])
         setExperimentRecommendations(recommendationData.recommendations || [])
         setExperimentMessage(`Recommendations generated for user ${experimentUserId}.`)
-        return getUserMetrics(experimentDataset, experimentUserId, 'pos4', 100, 10)
-          .then((userMetricData) => {
-            setMetricRows(userMetricData.metrics || [])
-            const caseCount = userMetricData.test_case_count || 0
-            setMetricMessage(
-              caseCount > 0
-                ? `Computed on ${caseCount} positive test case${caseCount === 1 ? '' : 's'} for user ${experimentUserId}.`
-                : `No positive test cases found for user ${experimentUserId} under Pos4.`
-            )
-          })
-          .catch((error) => {
-            setMetricRows([])
-            setMetricMessage(`User-specific metrics unavailable: ${error.message}`)
-          })
       })
       .catch((error) => {
         setExperimentMessage(`Could not load recommendations: ${error.message}`)
@@ -852,8 +828,6 @@ function App() {
                         value={experimentDataset}
                         onChange={(event) => {
                           setExperimentDataset(event.target.value)
-                          setMetricRows([])
-                          setMetricMessage('Run a recommendation to compute user-specific offline metrics.')
                         }}
                       >
                         {datasets.map((dataset) => (
@@ -868,8 +842,6 @@ function App() {
                         value={experimentUserId}
                         onChange={(event) => {
                           setExperimentUserId(event.target.value)
-                          setMetricRows([])
-                          setMetricMessage('Run a recommendation to compute user-specific offline metrics.')
                         }}
                         placeholder="Enter a dataset user id"
                       />
@@ -996,8 +968,7 @@ function App() {
                   </div>
 
                   <section className="experiment-card">
-                    <h2>User-Specific Offline Metrics, Pos4, 100 Negatives, K=10</h2>
-                    <p className="metric-status">{metricMessage}</p>
+                    <h2>Dataset-Level Offline Metrics, Pos4, 100 Negatives, K=10</h2>
                     <div className="table-wrap">
                       <table>
                         <thead>
@@ -1023,7 +994,7 @@ function App() {
                           ))}
                         </tbody>
                       </table>
-                      {metricRows.length === 0 && <p className="empty-table">Run a recommendation to compute metrics for the current user.</p>}
+                      {metricRows.length === 0 && <p className="empty-table">No saved offline metrics found for this dataset.</p>}
                     </div>
                   </section>
 

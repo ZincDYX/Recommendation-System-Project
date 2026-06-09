@@ -122,7 +122,6 @@ function App() {
   const [profile, setProfile] = useState({
     name: 'Guest User',
     address: 'Beijing, China',
-    avatar: '',
     isLoggedIn: false,
     isTester: false,
     userId: 'guest',
@@ -664,11 +663,7 @@ function App() {
                   className="avatar-btn"
                   onClick={() => navigate('/profile')}
                 >
-                  {profile.avatar ? (
-                    <img src={profile.avatar} alt="profile" />
-                  ) : (
-                    <span>👤</span>
-                  )}
+                  <span>👤</span>
                 </button>
               </header>
 

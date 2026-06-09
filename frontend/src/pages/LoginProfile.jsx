@@ -33,17 +33,6 @@ function LoginProfile({
     setIsEditing(false)
   }
 
-  function handleAvatarChange(event) {
-    const file = event.target.files[0]
-
-    if (!file) return
-
-    setProfile({
-      ...profile,
-      avatar: URL.createObjectURL(file),
-    })
-  }
-
   function handleLoginChange(event) {
     const { name, value } = event.target
     setLoginForm((current) => ({
@@ -123,24 +112,8 @@ function LoginProfile({
         <div className="profile-header">
           <div className="avatar-area">
             <div className="profile-avatar">
-              {profile.avatar ? (
-                <img src={profile.avatar} alt="profile" />
-              ) : (
-                <span>👤</span>
-              )}
+              <span>👤</span>
             </div>
-
-            {isEditing && (
-              <label className="change-avatar-btn">
-                Change photo
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleAvatarChange}
-                  hidden
-                />
-              </label>
-            )}
           </div>
 
           <div className="profile-main">

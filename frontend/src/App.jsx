@@ -645,19 +645,25 @@ function App() {
         query: activeQuery,
         contextItems,
       }),
-      getUserMetrics(experimentDataset, experimentUserId, 'pos4', 100, 10),
     ])
-      .then(([historyData, recommendationData, userMetricData]) => {
+      .then(([historyData, recommendationData]) => {
         setHistoryRows(historyData.history || [])
         setExperimentRecommendations(recommendationData.recommendations || [])
-        setMetricRows(userMetricData.metrics || [])
-        const caseCount = userMetricData.test_case_count || 0
-        setMetricMessage(
-          caseCount > 0
-            ? `Computed on ${caseCount} positive test case${caseCount === 1 ? '' : 's'} for user ${experimentUserId}.`
-            : `No positive test cases found for user ${experimentUserId} under Pos4.`
-        )
         setExperimentMessage(`Recommendations generated for user ${experimentUserId}.`)
+        return getUserMetrics(experimentDataset, experimentUserId, 'pos4', 100, 10)
+          .then((userMetricData) => {
+            setMetricRows(userMetricData.metrics || [])
+            const caseCount = userMetricData.test_case_count || 0
+            setMetricMessage(
+              caseCount > 0
+                ? `Computed on ${caseCount} positive test case${caseCount === 1 ? '' : 's'} for user ${experimentUserId}.`
+                : `No positive test cases found for user ${experimentUserId} under Pos4.`
+            )
+          })
+          .catch((error) => {
+            setMetricRows([])
+            setMetricMessage(`User-specific metrics unavailable: ${error.message}`)
+          })
       })
       .catch((error) => {
         setExperimentMessage(`Could not load recommendations: ${error.message}`)

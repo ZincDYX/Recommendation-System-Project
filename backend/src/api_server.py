@@ -26,7 +26,191 @@ DATA_ROOT = Path(os.getenv("RECSYS_DATA_ROOT", PROJECT_ROOT / "rec_data"))
 MODEL_ROOT = Path(os.getenv("RECSYS_MODEL_ROOT", BACKEND_ROOT / "saved_models"))
 RESULTS_ROOT = Path(os.getenv("RECSYS_RESULTS_ROOT", BACKEND_ROOT / "results"))
 ALL_CATEGORY = "All"
-CATALOG_CATEGORIES = ["All", "2020s", "2010s", "2000s", "1990s", "Classics", "Other"]
+GENRE_KEYWORDS = [
+    (
+        "Action",
+        [
+            "action",
+            "adventure",
+            "avengers",
+            "batman",
+            "battle",
+            "bond",
+            "bourne",
+            "captain america",
+            "die hard",
+            "dragon",
+            "fast furious",
+            "fight",
+            "iron man",
+            "john wick",
+            "mission impossible",
+            "police",
+            "rambo",
+            "spider man",
+            "superman",
+            "thor",
+            "war",
+            "x men",
+        ],
+    ),
+    (
+        "Comedy",
+        [
+            "comedy",
+            "borat",
+            "bride",
+            "dumb",
+            "funny",
+            "grand budapest hotel",
+            "hangover",
+            "meet the",
+            "monty python",
+            "naked gun",
+            "school of rock",
+            "vacation",
+            "wedding",
+        ],
+    ),
+    (
+        "Drama",
+        [
+            "drama",
+            "beautiful mind",
+            "casablanca",
+            "citizen kane",
+            "forrest gump",
+            "godfather",
+            "green mile",
+            "parasite",
+            "pianist",
+            "professional",
+            "redemption",
+            "schindler",
+            "shawshank",
+        ],
+    ),
+    (
+        "Romance",
+        [
+            "romance",
+            "before sunrise",
+            "before sunset",
+            "kiss",
+            "love",
+            "notting hill",
+            "pretty woman",
+            "titanic",
+            "valentine",
+        ],
+    ),
+    (
+        "Sci-Fi",
+        [
+            "sci fi",
+            "science fiction",
+            "alien",
+            "avatar",
+            "blade runner",
+            "dune",
+            "future",
+            "galaxy",
+            "interstellar",
+            "jurassic",
+            "matrix",
+            "planet",
+            "robot",
+            "space",
+            "star trek",
+            "star wars",
+            "terminator",
+            "time travel",
+        ],
+    ),
+    (
+        "Animation",
+        [
+            "animation",
+            "animated",
+            "anime",
+            "cartoon",
+            "disney",
+            "finding nemo",
+            "frozen",
+            "lion king",
+            "pixar",
+            "pokemon",
+            "shrek",
+            "toy story",
+            "wall e",
+        ],
+    ),
+    (
+        "Documentary",
+        [
+            "documentary",
+            "docu",
+            "history of",
+            "inside job",
+            "journey",
+            "planet earth",
+            "truth",
+        ],
+    ),
+    (
+        "Horror",
+        [
+            "horror",
+            "conjuring",
+            "dead",
+            "dracula",
+            "evil",
+            "exorcist",
+            "frankenstein",
+            "ghost",
+            "halloween",
+            "nightmare",
+            "psycho",
+            "saw",
+            "scream",
+            "shining",
+            "vampire",
+            "zombie",
+        ],
+    ),
+    (
+        "Thriller",
+        [
+            "thriller",
+            "crime",
+            "detective",
+            "fugitive",
+            "gone girl",
+            "killer",
+            "murder",
+            "mystery",
+            "se7en",
+            "shutter island",
+            "silence of the lambs",
+            "spy",
+            "usual suspects",
+        ],
+    ),
+    (
+        "Family",
+        [
+            "family",
+            "christmas",
+            "children",
+            "home alone",
+            "jumanji",
+            "muppets",
+            "sesame street",
+            "wizard of oz",
+        ],
+    ),
+]
+CATALOG_CATEGORIES = [ALL_CATEGORY, *[genre for genre, _ in GENRE_KEYWORDS], "Other"]
 
 app = FastAPI(title="Recommendation System API")
 app.add_middleware(
@@ -104,21 +288,18 @@ def stable_price(item_id: str) -> int:
     return 20 + int(digest[:4], 16) % 480
 
 
+def normalize_for_genre(text: str) -> str:
+    return f" {re.sub(r'[^a-z0-9]+', ' ', text.lower()).strip()} "
+
+
 def item_category(title: str) -> str:
-    """Assign a coarse display category from the title when no genre exists."""
-    years = [int(value) for value in re.findall(r"(?:19|20)\d{2}", title)]
-    if not years:
-        return "Other"
-    year = years[-1]
-    if year >= 2020:
-        return "2020s"
-    if year >= 2010:
-        return "2010s"
-    if year >= 2000:
-        return "2000s"
-    if year >= 1990:
-        return "1990s"
-    return "Classics"
+    """Infer a display genre from title keywords when metadata has no genre."""
+    normalized_title = normalize_for_genre(title)
+    for genre, keywords in GENRE_KEYWORDS:
+        for keyword in keywords:
+            if normalize_for_genre(keyword) in normalized_title:
+                return genre
+    return "Other"
 
 
 def item_payload(dataset: str, item_id: str, item_info: dict[str, str], score: float | None = None) -> dict[str, Any]:

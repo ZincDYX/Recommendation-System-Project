@@ -160,6 +160,7 @@ function App() {
         setUserId(firstUser)
         setExperimentUserId(firstUser)
         setCatalogCategories(categoryNames.length > 0 ? categoryNames : categories)
+        setSelectedCategory((current) => categoryNames.includes(current) ? current : ALL_CATEGORY)
       })
       .catch(() => {
         if (!isMounted) return

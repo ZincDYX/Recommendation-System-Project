@@ -106,6 +106,10 @@
   cursor: pointer;
 }
 
+.detail-add-btn.added {
+  background: #111827;
+}
+
 @media (max-width: 860px) {
   .detail-page {
     padding: 28px 20px;

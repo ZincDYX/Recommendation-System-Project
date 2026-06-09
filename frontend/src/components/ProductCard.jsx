@@ -46,14 +46,12 @@ function ProductCard({ product, onAdd, onView }) {
           <button
             className={isInWatchlist ? 'cart-btn added' : 'cart-btn'}
             aria-pressed={isInWatchlist}
-            aria-disabled={isInWatchlist}
             onClick={(event) => {
               event.stopPropagation()
-              if (isInWatchlist) return
               onAdd?.(product)
             }}
           >
-            {isInWatchlist ? 'Added' : 'Watchlist'}
+            {isInWatchlist ? 'Added' : 'Add'}
           </button>
         </div>
       </div>

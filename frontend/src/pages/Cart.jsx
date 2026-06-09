@@ -4,23 +4,27 @@ import './Cart.css'
 
 function Cart({ items = [], onRemove, onClear }) {
   const [selectedIds, setSelectedIds] = useState([])
+  const itemKey = (item) => String(item.item_id || item.id)
 
   function handleToggleSelect(id) {
+    const normalizedId = String(id)
     setSelectedIds((prev) =>
-      prev.includes(id)
-        ? prev.filter((itemId) => itemId !== id)
-        : [...prev, id]
+      prev.includes(normalizedId)
+        ? prev.filter((itemId) => itemId !== normalizedId)
+        : [...prev, normalizedId]
     )
   }
 
   function handleRemove(id) {
-    setSelectedIds((prev) => prev.filter((itemId) => itemId !== id))
+    const normalizedId = String(id)
+    setSelectedIds((prev) => prev.filter((itemId) => itemId !== normalizedId))
     onRemove?.(id)
   }
 
   function handleClear() {
+    if (selectedIds.length === 0) return
+    onClear?.(selectedIds)
     setSelectedIds([])
-    onClear?.()
   }
 
   return (
@@ -33,9 +37,9 @@ function Cart({ items = [], onRemove, onClear }) {
 
       {items.map((item) => (
         <CartItemCard
-          key={item.id}
+          key={itemKey(item)}
           item={item}
-          selected={selectedIds.includes(item.id)}
+          selected={selectedIds.includes(itemKey(item))}
           onToggleSelect={handleToggleSelect}
           onRemove={handleRemove}
         />
@@ -43,7 +47,9 @@ function Cart({ items = [], onRemove, onClear }) {
 
       <div className="cart-summary">
         <span>{selectedIds.length} selected · {items.length} in watchlist</span>
-        <button type="button" onClick={handleClear}>Clear</button>
+        <button type="button" disabled={selectedIds.length === 0} onClick={handleClear}>
+          Clear Selected
+        </button>
       </div>
     </div>
   )

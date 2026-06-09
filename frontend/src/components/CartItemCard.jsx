@@ -10,7 +10,8 @@ function CartItemCard({
   const navigate = useNavigate()
   const title = String(item.name || item.title || item.item_id || item.id)
   const dataset = item.dataset || 'MovieLens'
-  const itemId = encodeURIComponent(String(item.item_id || item.id))
+  const itemId = String(item.item_id || item.id)
+  const encodedItemId = encodeURIComponent(itemId)
   const ratingLabel = item.avg_rating
     ? `★ ${Number(item.avg_rating).toFixed(2)}`
     : 'No rating'
@@ -19,7 +20,7 @@ function CartItemCard({
     <div className="cart-item-card">
       <button
         className="cart-item-image"
-        onClick={() => navigate(`/product/${dataset}/${itemId}`)}
+        onClick={() => navigate(`/product/${dataset}/${encodedItemId}`)}
       >
         {item.image ? (
           <img src={item.image} alt={title} />
@@ -35,14 +36,14 @@ function CartItemCard({
 
       <button
         className={selected ? 'select-btn selected' : 'select-btn'}
-        onClick={() => onToggleSelect(item.id)}
+        onClick={() => onToggleSelect(itemId)}
       >
         Select
       </button>
 
       <button
         className="remove-btn"
-        onClick={() => onRemove(item.id)}
+        onClick={() => onRemove(itemId)}
       >
         Remove
       </button>

@@ -48,6 +48,7 @@ function LoginProfile({
 
   function activityText(event) {
     if (event.action === 'add') return `${event.title} added`
+    if (event.action === 'remove') return `${event.title} removed`
     if (event.action === 'view') return `${event.title} viewed`
     if (event.action === 'search') return `searched "${event.title}"`
     return `${event.title} ${event.action}`

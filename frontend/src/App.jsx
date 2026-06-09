@@ -411,6 +411,21 @@ function App() {
     })
   }
 
+  function recordSessionEvent(product, action) {
+    const itemId = product.item_id || product.id
+    if (!itemId) return
+    setSessionEvents((prev) => [
+      {
+        action,
+        itemId,
+        title: product.title || product.name || itemId,
+        timestamp: Date.now(),
+      },
+      ...prev,
+    ])
+    syncExperimentToLoggedInUser()
+  }
+
   function handleViewProduct(product) {
     recordSessionItem(product, 'view')
     setSelectedCategory(ALL_CATEGORY)
@@ -418,9 +433,14 @@ function App() {
   }
 
   function handleAddToCart(product) {
-    // Adding a movie to the watchlist is treated as a session signal for reranking.
+    // The Add button toggles the current session watchlist without changing dataset files.
     const itemId = productKey(product)
-    if (cartItems.some((item) => productKey(item) === itemId)) return
+    if (cartItems.some((item) => productKey(item) === itemId)) {
+      setCartItems((prev) => prev.filter((item) => productKey(item) !== itemId))
+      setContextItems((prev) => prev.filter((contextItemId) => contextItemId !== itemId))
+      recordSessionEvent(product, 'remove')
+      return
+    }
     setCartItems((prev) => {
       if (prev.some((item) => productKey(item) === itemId)) return prev
       return [...prev, product]
@@ -430,13 +450,14 @@ function App() {
   }
 
   function handleRemoveFromCart(id) {
-    setCartItems((prev) => prev.filter((item) => item.id !== id))
+    setCartItems((prev) => prev.filter((item) => productKey(item) !== id))
     setContextItems((prev) => prev.filter((itemId) => itemId !== id))
   }
 
-  function handleClearWatchlist() {
-    const watchlistIds = new Set(cartItems.map((item) => productKey(item)))
-    setCartItems([])
+  function handleClearWatchlist(selectedIds = []) {
+    const watchlistIds = new Set(selectedIds)
+    if (watchlistIds.size === 0) return
+    setCartItems((prev) => prev.filter((item) => !watchlistIds.has(productKey(item))))
     setContextItems((prev) => prev.filter((itemId) => !watchlistIds.has(itemId)))
   }
 
@@ -968,6 +989,7 @@ function App() {
           path="/product/:dataset/:itemId"
           element={
             <ProductDetail
+              watchlistItemIds={watchlistItemIds}
               onAdd={handleAddToCart}
             />
           }

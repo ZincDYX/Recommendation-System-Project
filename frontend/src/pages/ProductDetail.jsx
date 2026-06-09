@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { getMovieDetails } from '../api/api'
 import './ProductDetail.css'
 
-function ProductDetail({ onAdd }) {
+function ProductDetail({ watchlistItemIds = new Set(), onAdd }) {
   const navigate = useNavigate()
   const { dataset = 'MovieLens', itemId = '' } = useParams()
   const decodedItemId = decodeURIComponent(itemId)
@@ -37,6 +37,7 @@ function ProductDetail({ onAdd }) {
 
   const title = detail?.title || detail?.name || decodedItemId
   const genres = detail?.genres?.length ? detail.genres : [detail?.category || 'Unknown']
+  const isInWatchlist = watchlistItemIds.has(String(decodedItemId))
 
   return (
     <main className="detail-page">
@@ -81,8 +82,13 @@ function ProductDetail({ onAdd }) {
           </section>
 
           {detail && (
-            <button className="detail-add-btn" type="button" onClick={() => onAdd?.(detail)}>
-              Watchlist
+            <button
+              className={isInWatchlist ? 'detail-add-btn added' : 'detail-add-btn'}
+              type="button"
+              aria-pressed={isInWatchlist}
+              onClick={() => onAdd?.(detail)}
+            >
+              {isInWatchlist ? 'Added' : 'Add'}
             </button>
           )}
         </div>

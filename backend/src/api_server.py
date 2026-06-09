@@ -539,15 +539,15 @@ def session_recommend_items(
 
 def model_reason(model_name: str) -> str:
     reasons = {
-        "popularity": "该物品在训练集中整体热度较高，适合作为热门推荐结果。",
-        "itemcf": "基于物品协同过滤，该物品与用户历史交互物品存在相似的共现模式。",
-        "content_tfidf": "基于内容 TF-IDF，该物品标题内容与用户历史兴趣更接近。",
-        "bpr_mf": "BPR 矩阵分解模型预测该用户对该物品的隐式偏好得分较高。",
-        "gru4rec": "GRU4Rec 根据用户近期行为序列预测该物品可能符合下一步兴趣。",
-        "ensemble": "融合模型综合了热门度、协同过滤、内容相似和深度模型信号后给出较高排序。",
-        "session": "该物品根据本次会话中的点击、加购和搜索信号实时推荐。",
+        "popularity": "推荐证据：该物品在训练集中整体热度较高，适合作为热门推荐结果。",
+        "itemcf": "推荐证据：物品协同过滤发现它与用户历史交互物品存在相似的共现模式。",
+        "content_tfidf": "推荐证据：内容 TF-IDF 发现它的标题词项与用户历史兴趣更接近。",
+        "bpr_mf": "推荐证据：BPR 矩阵分解模型预测该用户对该物品的隐式偏好得分较高。",
+        "gru4rec": "推荐证据：GRU4Rec 根据用户近期行为序列预测该物品可能符合下一步兴趣。",
+        "ensemble": "推荐证据：融合模型综合热门度、协同过滤、内容相似和深度模型信号后给出较高排序。",
+        "session": "推荐证据：该物品由本次会话中的点击、加购和搜索信号实时触发；genre 只用于页面浏览。",
     }
-    return reasons.get(model_name, "该物品在当前算法排序中得分较高，因此被推荐。")
+    return reasons.get(model_name, "推荐证据：该物品在当前算法排序中得分较高，因此被推荐。")
 
 
 def explanation_for_item(
@@ -563,17 +563,17 @@ def explanation_for_item(
     title_tokens = tokenize(item_info.get(item_id, ""))
     query_value = (query or "").strip()
     if query_value and title_tokens & tokenize(query_value):
-        return f"该结果与当前搜索词“{query_value}”在标题内容上匹配，因此被优先展示。"
+        return f"推荐证据：当前搜索词“{query_value}”与该标题存在词项匹配，因此被优先展示；genre 只用于页面浏览。"
 
     for context_item_id in context_item_ids:
         context_title = item_info.get(context_item_id, "")
         if title_tokens & tokenize(context_title):
-            return f"该结果与你加入购物车或作为会话信号的物品“{context_title or context_item_id}”具有相似标题特征。"
+            return f"推荐证据：你本次点击或加购过“{context_title or context_item_id}”，该结果与它存在标题词项或物品共现相似；genre 只用于页面浏览。"
 
     for _, history_item_id, _, _ in reversed(recent_history(train, user_id, 10)):
         history_title = item_info.get(history_item_id, "")
         if title_tokens & tokenize(history_title):
-            return f"该结果与用户近期历史行为中的“{history_title or history_item_id}”存在内容相似性。"
+            return f"推荐证据：该结果与用户近期历史行为中的“{history_title or history_item_id}”存在内容相似性。"
 
     return model_reason(model_name)
 

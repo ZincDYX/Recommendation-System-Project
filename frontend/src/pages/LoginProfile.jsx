@@ -8,6 +8,7 @@ function LoginProfile({
   datasets = [],
   onLogin,
   onLogout,
+  onBrowseMovies,
   loginMessage = '',
   loginLoading = false,
 }) {
@@ -158,6 +159,10 @@ function LoginProfile({
           </div>
 
           <div className="profile-actions">
+            <button className="browse-btn" onClick={onBrowseMovies}>
+              Browse Movies
+            </button>
+
             <button
               className="edit-profile-btn"
               onClick={() => {

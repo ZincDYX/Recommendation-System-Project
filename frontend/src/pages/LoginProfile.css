@@ -134,6 +134,7 @@
 }
 
 .login-form button,
+.browse-btn,
 .logout-btn {
   border: none;
   border-radius: 999px;
@@ -142,6 +143,10 @@
   padding: 11px 18px;
   font-weight: 800;
   cursor: pointer;
+}
+
+.browse-btn {
+  background: #111827;
 }
 
 .login-form button:disabled {

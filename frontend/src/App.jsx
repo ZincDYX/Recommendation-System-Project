@@ -2,6 +2,7 @@ import './App.css'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import {
+  Navigate,
   Routes,
   Route,
   useNavigate
@@ -628,7 +629,8 @@ function App() {
         <Route
           path="/"
           element={
-            <>
+            profile.isLoggedIn ? (
+              <>
               <header className="header">
                 <button
                   className="icon-btn"
@@ -923,7 +925,10 @@ function App() {
                   </section>
                 </main>
               )}
-            </>
+              </>
+            ) : (
+              <Navigate to="/profile" replace />
+            )
           }
         />
 
@@ -937,6 +942,7 @@ function App() {
               datasets={datasets}
               onLogin={handleLogin}
               onLogout={handleLogout}
+              onBrowseMovies={() => navigate('/')}
               loginMessage={loginMessage}
               loginLoading={loginLoading}
             />

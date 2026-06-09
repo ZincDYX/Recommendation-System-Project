@@ -2,11 +2,9 @@ import './ProductCard.css'
 
 function ProductCard({ product, onAdd, onView }) {
   const title = String(product.name || product.title || product.item_id || product.id)
-  const genreLabel = product.genres?.length
-    ? product.genres.slice(0, 2).join(' · ')
-    : product.category
+  const genreLabel = product.category || 'Other'
   const ratingLabel = product.avg_rating
-    ? `★ ${Number(product.avg_rating).toFixed(2)} (${product.rating_count || 0})`
+    ? `★ ${Number(product.avg_rating).toFixed(2)}`
     : 'No rating'
 
   return (

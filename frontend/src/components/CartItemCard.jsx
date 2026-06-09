@@ -12,7 +12,7 @@ function CartItemCard({
   const dataset = item.dataset || 'MovieLens'
   const itemId = encodeURIComponent(String(item.item_id || item.id))
   const ratingLabel = item.avg_rating
-    ? `★ ${Number(item.avg_rating).toFixed(2)} (${item.rating_count || 0})`
+    ? `★ ${Number(item.avg_rating).toFixed(2)}`
     : 'No rating'
 
   return (

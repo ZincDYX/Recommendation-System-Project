@@ -448,8 +448,8 @@ function App() {
       const genres = detail.genres?.length ? detail.genres : product.genres
       return {
         ...product,
-        category: detail.category || product.category,
         genres,
+        externalCategory: detail.category || product.externalCategory,
         genreSource: detail.genre_source || product.genreSource,
         description: detail.external_found ? 'Wikipedia / Wikidata genre' : product.description,
       }

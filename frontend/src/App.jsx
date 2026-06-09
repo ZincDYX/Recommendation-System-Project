@@ -440,35 +440,41 @@ function App() {
   }
 
   const visibleProducts = useMemo(() => {
+    const productCategory = (product) => product.displayCategory || product.externalCategory || product.category
     const enrichProduct = (product) => {
       const dataset = product.dataset || DEFAULT_DATASET
       const itemId = productKey(product)
       const detail = movieDetailsById[movieDetailKey(dataset, itemId)]
       if (!detail) return product
       const genres = detail.genres?.length ? detail.genres : product.genres
+      const externalCategory = detail.external_found ? detail.category : product.externalCategory
       return {
         ...product,
         genres,
-        externalCategory: detail.category || product.externalCategory,
+        externalCategory,
+        displayCategory: externalCategory || product.displayCategory || product.category,
         genreSource: detail.genre_source || product.genreSource,
         description: detail.external_found ? 'Wikipedia / Wikidata genre' : product.description,
       }
     }
+    const enrichedRecommendations = recommendedProducts.map((product) => ({
+      ...enrichProduct(product),
+      isRecommended: true,
+    }))
     const recommendedMap = new Map(
-      recommendedProducts.map((product) => [
+      enrichedRecommendations.map((product) => [
         productKey(product),
-        {
-          ...enrichProduct(product),
-          isRecommended: true,
-        },
+        product,
       ])
     )
-    const matchesCategory = (product) => selectedCategory === ALL_CATEGORY || product.category === selectedCategory
-    const rankedRecommendations = Array.from(recommendedMap.values()).filter(matchesCategory)
+    const matchesCategory = (product) => selectedCategory === ALL_CATEGORY || productCategory(product) === selectedCategory
+    const rankedRecommendations = enrichedRecommendations.filter(matchesCategory)
     const regularProducts = catalogProducts
+      .map(enrichProduct)
       .filter((product) => !recommendedMap.has(productKey(product)))
+      .filter(matchesCategory)
       .map((product) => ({
-        ...enrichProduct(product),
+        ...product,
         isRecommended: false,
       }))
     return [...rankedRecommendations, ...regularProducts]

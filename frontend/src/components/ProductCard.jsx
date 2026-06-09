@@ -2,7 +2,7 @@ import './ProductCard.css'
 
 function ProductCard({ product, onAdd, onView }) {
   const title = String(product.name || product.title || product.item_id || product.id)
-  const genreLabel = product.category || 'Other'
+  const genreLabel = product.displayCategory || product.externalCategory || product.category || 'Other'
   const ratingLabel = product.avg_rating
     ? `★ ${Number(product.avg_rating).toFixed(2)}`
     : 'No rating'

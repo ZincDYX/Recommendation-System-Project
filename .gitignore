@@ -1,5 +1,6 @@
 # Data and assignment artifacts
 rec_data/
+PROJECT_REPORT.md
 *.zip
 *.7z
 *.rar

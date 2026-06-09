@@ -2,6 +2,9 @@ import './ProductCard.css'
 
 function ProductCard({ product, onAdd, onView }) {
   const title = String(product.name || product.title || product.item_id || product.id)
+  const genreLabel = product.genres?.length
+    ? product.genres.slice(0, 2).join(' · ')
+    : product.category
 
   return (
     <div
@@ -23,7 +26,7 @@ function ProductCard({ product, onAdd, onView }) {
       </div>
 
       <div className="product-info">
-        <p className="product-category">{product.category}</p>
+        <p className="product-category">{genreLabel}</p>
         <h3 className="product-name">{title}</h3>
         <p className="product-desc">{product.description}</p>
         {product.score !== undefined && (

@@ -1,5 +1,5 @@
 import './App.css'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   Routes,
@@ -24,6 +24,7 @@ import {
   getItems,
   getMetrics,
   getModels,
+  getMovieDetails,
   getRecommendations,
   getSessionRecommendations,
   getUsers,
@@ -96,6 +97,10 @@ function productKey(product) {
   return String(product.item_id || product.id)
 }
 
+function movieDetailKey(dataset, itemId) {
+  return `${dataset}:${itemId}`
+}
+
 function fallbackCatalog(category, query) {
   const normalizedQuery = query.trim().toLowerCase()
   return products.filter((product) => {
@@ -127,6 +132,8 @@ function App() {
   const [catalogTotal, setCatalogTotal] = useState(0)
   const [catalogLoading, setCatalogLoading] = useState(false)
   const [catalogMessage, setCatalogMessage] = useState('Loading real catalog...')
+  const [genreMessage, setGenreMessage] = useState('')
+  const [movieDetailsById, setMovieDetailsById] = useState({})
   const [recommendedProducts, setRecommendedProducts] = useState([])
   const [apiMessage, setApiMessage] = useState('Connecting recommendation backend...')
   const [isLoading, setIsLoading] = useState(false)
@@ -143,6 +150,7 @@ function App() {
   const [experimentLoading, setExperimentLoading] = useState(false)
 
   const navigate = useNavigate()
+  const genreFetchesRef = useRef(new Set())
 
   useEffect(() => {
     // Load catalog metadata; store mode intentionally starts as a cold guest.
@@ -237,6 +245,7 @@ function App() {
 
   function loadCatalogPage(offset = 0, append = false) {
     setCatalogLoading(true)
+    setGenreMessage('')
     return getItems({
       dataset: DEFAULT_DATASET,
       category: selectedCategory,
@@ -266,6 +275,60 @@ function App() {
   useEffect(() => {
     loadCatalogPage(0, false)
   }, [activeQuery, selectedCategory])
+
+  useEffect(() => {
+    const productsToEnrich = new Map()
+    for (const product of [...catalogProducts, ...recommendedProducts]) {
+      const dataset = product.dataset || DEFAULT_DATASET
+      const itemId = productKey(product)
+      const key = movieDetailKey(dataset, itemId)
+      if (dataset === DEFAULT_DATASET && !movieDetailsById[key] && !genreFetchesRef.current.has(key)) {
+        productsToEnrich.set(key, { dataset, itemId })
+      }
+    }
+
+    const pending = Array.from(productsToEnrich.values())
+    if (pending.length === 0) return
+
+    let isCancelled = false
+    let cursor = 0
+    let completed = 0
+    pending.forEach((item) => {
+      genreFetchesRef.current.add(movieDetailKey(item.dataset, item.itemId))
+    })
+    setGenreMessage(`Updating movie genres for ${pending.length} visible items...`)
+
+    async function worker() {
+      while (!isCancelled && cursor < pending.length) {
+        const current = pending[cursor]
+        cursor += 1
+        const key = movieDetailKey(current.dataset, current.itemId)
+        try {
+          const detail = await getMovieDetails(current.dataset, current.itemId)
+          if (!isCancelled) {
+            setMovieDetailsById((prev) => ({
+              ...prev,
+              [key]: detail,
+            }))
+          }
+        } catch {
+          // Keep the title-based fallback category when external metadata is unavailable.
+        } finally {
+          completed += 1
+          if (!isCancelled && completed === pending.length) {
+            setGenreMessage('')
+          }
+        }
+      }
+    }
+
+    const workerCount = Math.min(4, pending.length)
+    Array.from({ length: workerCount }, () => worker())
+
+    return () => {
+      isCancelled = true
+    }
+  }, [catalogProducts, recommendedProducts, movieDetailsById])
 
   function handleSearch(event) {
     event.preventDefault()
@@ -371,11 +434,25 @@ function App() {
   }
 
   const visibleProducts = useMemo(() => {
+    const enrichProduct = (product) => {
+      const dataset = product.dataset || DEFAULT_DATASET
+      const itemId = productKey(product)
+      const detail = movieDetailsById[movieDetailKey(dataset, itemId)]
+      if (!detail) return product
+      const genres = detail.genres?.length ? detail.genres : product.genres
+      return {
+        ...product,
+        category: detail.category || product.category,
+        genres,
+        genreSource: detail.genre_source || product.genreSource,
+        description: detail.external_found ? 'Wikipedia / Wikidata genre' : product.description,
+      }
+    }
     const recommendedMap = new Map(
       recommendedProducts.map((product) => [
         productKey(product),
         {
-          ...product,
+          ...enrichProduct(product),
           isRecommended: true,
         },
       ])
@@ -385,11 +462,11 @@ function App() {
     const regularProducts = catalogProducts
       .filter((product) => !recommendedMap.has(productKey(product)))
       .map((product) => ({
-        ...product,
+        ...enrichProduct(product),
         isRecommended: false,
       }))
     return [...rankedRecommendations, ...regularProducts]
-  }, [catalogProducts, recommendedProducts, selectedCategory])
+  }, [catalogProducts, recommendedProducts, selectedCategory, movieDetailsById])
   const sampleUsers = useMemo(() => SAMPLE_USERS[experimentDataset] || [], [experimentDataset])
 
   return (
@@ -464,6 +541,7 @@ function App() {
                         <h1>{selectedCategory}</h1>
                         <p>{apiMessage}</p>
                         <p>{catalogMessage}</p>
+                        {genreMessage && <p>{genreMessage}</p>}
                       </div>
 
                       <div className="recommendation-meta">

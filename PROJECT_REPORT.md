@@ -64,7 +64,7 @@ GitHub 仓库链接：https://github.com/ZincDYX/Recommendation-System-Project
 | `content_tfidf` | 自行读取 `info.jsonl` 的标题文本，并用 TF-IDF 建立物品文本向量。用户画像由近期高分历史物品的 TF-IDF 向量按评分加权求和得到，候选物品通过与用户画像的点积相似度打分。这里使用的是标题级浅层语义信息，不是剧情简介、BERT 或 LLM embedding。 | 固定参数为 `max_features=50000`、`max_user_history=80`、`ngram_range=(1,2)`、英文停用词过滤。融合调参后权重为 MovieLens `0.2`，Movies_and_TV `0`。这和整体指标一致：标题 TF-IDF 单模型效果较弱，尤其 Movies_and_TV 标题噪声更明显。 |
 | `bpr_mf` | 使用 PyTorch 自实现矩阵分解模型，包括 user embedding、item embedding、user bias、item bias。训练样本来自正反馈交互；每个正样本在线随机采一个用户未正反馈过的负物品，优化 BPR pairwise ranking loss，使正物品分数高于负物品。 | 固定参数为 `factors=64`、`epochs=3`、`batch_size=2048`、`lr=1e-3`、`max_train_samples=500000`、`positive_threshold=4.0`。融合调参后权重为 MovieLens `0.2`，Movies_and_TV `0.4`，说明隐式反馈矩阵分解是两个数据集上的核心个性化信号之一。 |
 | `gru4rec` | 使用 PyTorch 自实现序列推荐模型。用户历史按时间戳排序，只保留正反馈序列；模型结构为 item embedding + GRU + linear output，用历史前缀预测下一个正反馈物品，因此显式考虑交互时序。 | 固定参数为 `embedding_dim=64`、`hidden_dim=64`、`max_seq_len=50`、`epochs=3`、`batch_size=2048`、`lr=1e-3`、`max_train_samples=500000`。融合调参后权重为 MovieLens `0.4`，Movies_and_TV `0.2`，说明 MovieLens 上时序兴趣信号更有效。 |
-| `ensemble` | 自实现融合层。先对每个基础模型在候选集上的分数做 min-max 归一化，再使用调参得到的数据集级 base weights。正式后端进一步加入用户级动态修正：短历史用户提高 `popularity/content_tfidf`，长历史用户提高 `itemcf/bpr_mf`，长序列用户提高 `gru4rec`，当前 session 有搜索或加片单行为时提高 `itemcf/content_tfidf`。 | base weights 仍来自 `NDCG@10` 自动网格搜索；在线推荐时实际权重会随用户和 session 变化。MovieLens 全量重评后 `ensemble NDCG@10` 从约 `0.8161` 提升到 `0.8304`。Movies_and_TV 全量重评在本地超时，我只确认了 1000-case 抽样 `NDCG@10=0.6243`，不能把它当完整正式结果。 |
+| `ensemble` | 自实现融合层。先对每个基础模型在候选集上的分数做 min-max 归一化，再使用调参得到的数据集级 base weights。正式后端进一步加入用户级动态修正：短历史用户提高 `popularity/content_tfidf`，长历史用户提高 `itemcf/bpr_mf`，长序列用户提高 `gru4rec`，当前 session 有搜索或加片单行为时提高 `itemcf/content_tfidf`。 | base weights 仍来自 `NDCG@10` 自动网格搜索；在线推荐时实际权重会随用户和 session 变化。全量重评后，MovieLens 的 `ensemble NDCG@10` 从约 `0.8161` 提升到 `0.8304`，Movies_and_TV 的 `ensemble NDCG@10` 从约 `0.6229` 提升到 `0.6322`。 |
 
 ## 4. 算法推荐 Case
 
@@ -125,18 +125,16 @@ GitHub 仓库链接：https://github.com/ZincDYX/Recommendation-System-Project
 
 ### Movies_and_TV：`pos4`，100 negatives，K=10
 
-下面表格是上一次全量正式评测结果。后端已重训 Time-aware ItemCF，但 Movies_and_TV 的新全量重评在本地 1 小时超时，没有完成；我只完成了 1000-case 抽样检查，`ensemble NDCG@10=0.6243`，因此这里不把抽样结果替代正式全量表。
-
 | 算法 | Hit@10 | Precision@10 | Recall@10 | NDCG@10 | MRR@10 |
 |---|---:|---:|---:|---:|---:|
-| `ensemble` | 0.8407 | 0.0841 | 0.8407 | 0.6229 | 0.5542 |
+| `ensemble` | 0.8364 | 0.0836 | 0.8364 | 0.6322 | 0.5680 |
 | `popularity` | 0.8058 | 0.0806 | 0.8058 | 0.5655 | 0.4901 |
 | `bpr_mf` | 0.7968 | 0.0797 | 0.7968 | 0.5617 | 0.4880 |
 | `gru4rec` | 0.7906 | 0.0791 | 0.7906 | 0.5563 | 0.4828 |
-| `itemcf` | 0.3324 | 0.0332 | 0.3324 | 0.2819 | 0.2666 |
+| `itemcf` | 0.3319 | 0.0332 | 0.3319 | 0.2821 | 0.2669 |
 | `content_tfidf` | 0.2742 | 0.0274 | 0.2742 | 0.1931 | 0.1683 |
 
-结论：Movies_and_TV 上 `ensemble` 仍然最好，但整体分数低于 MovieLens。一个可能原因是该数据集物品更多、长尾更明显，且标题内容噪声更大；我不能完全确定这是唯一原因，因为需要进一步分析用户分布、物品分布和负采样结果。
+结论：Movies_and_TV 上 `ensemble` 仍然最好。Adaptive Ensemble 后，`Hit@10` 比旧结果略低，但 `NDCG@10` 和 `MRR@10` 提升，说明正例整体排得更靠前。整体分数仍低于 MovieLens，一个可能原因是该数据集物品更多、长尾更明显，且标题内容噪声更大；我不能完全确定这是唯一原因，因为需要进一步分析用户分布、物品分布和负采样结果。
 
 ## 7. 融合调参结果
 

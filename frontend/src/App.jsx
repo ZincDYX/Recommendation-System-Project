@@ -97,6 +97,33 @@ function formatMetric(value) {
   return Number(value || 0).toFixed(4)
 }
 
+function metricClass(rows, metricName, value) {
+  const values = rows
+    .map((row) => Number(row[metricName] || 0))
+    .filter((metricValue) => Number.isFinite(metricValue))
+  if (values.length < 2) return ''
+  const maxValue = Math.max(...values)
+  const minValue = Math.min(...values)
+  const minSpread = metricName === 'precision' ? 0.005 : 0.03
+  if (maxValue - minValue < minSpread) return ''
+  const numericValue = Number(value || 0)
+  if (Math.abs(numericValue - maxValue) < 1e-10) return 'metric-high'
+  if (Math.abs(numericValue - minValue) < 1e-10) return 'metric-low'
+  return ''
+}
+
+function modelSummary(row, rows) {
+  const sortedByNdcg = [...rows].sort((a, b) => Number(b.ndcg || 0) - Number(a.ndcg || 0))
+  const bestModel = sortedByNdcg[0]?.model
+  if (row.model === bestModel) return '综合排序质量最好，适合作为最终展示结果。'
+  if (row.model === 'content_tfidf') return '只利用标题文本，语义信息有限，通常作为内容基线。'
+  if (row.model === 'itemcf') return '可解释性强，但在稀疏数据上容易受共现不足影响。'
+  if (row.model === 'popularity') return '热门基线稳定，但个性化能力有限。'
+  if (row.model === 'bpr_mf') return '学习用户和物品隐向量，个性化能力较强。'
+  if (row.model === 'gru4rec') return '建模行为时序，体现深度序列推荐能力。'
+  return '用于对比整体排序表现。'
+}
+
 function productKey(product) {
   return String(product.item_id || product.id)
 }
@@ -154,6 +181,7 @@ function App() {
   const [historyRows, setHistoryRows] = useState([])
   const [experimentRecommendations, setExperimentRecommendations] = useState([])
   const [metricRows, setMetricRows] = useState([])
+  const [overallMetricRows, setOverallMetricRows] = useState({})
   const [experimentMessage, setExperimentMessage] = useState('Load a real dataset user to inspect recommendations.')
   const [experimentLoading, setExperimentLoading] = useState(false)
   const [loginMessage, setLoginMessage] = useState('Use a dataset user ID with password 0, or tester / 0 for an empty account.')
@@ -227,6 +255,24 @@ function App() {
       isMounted = false
     }
   }, [experimentDataset, profile.dataset, profile.isLoggedIn, profile.isTester, profile.userId])
+
+  useEffect(() => {
+    // Overall summary is dataset-level and does not depend on the selected user.
+    let isMounted = true
+    Promise.all(
+      datasets.map((datasetName) =>
+        getMetrics(datasetName, 'pos4', 100, 10)
+          .then((metricData) => [datasetName, metricData.metrics || []])
+          .catch(() => [datasetName, []])
+      )
+    ).then((entries) => {
+      if (!isMounted) return
+      setOverallMetricRows(Object.fromEntries(entries))
+    })
+    return () => {
+      isMounted = false
+    }
+  }, [datasets])
 
   useEffect(() => {
     // Storefront recommendations combine immutable dataset history with local session signals.
@@ -947,6 +993,52 @@ function App() {
                         </tbody>
                       </table>
                     </div>
+                  </section>
+
+                  <section className="experiment-card overall-summary-card">
+                    <h2>Overall Algorithm Performance Summary</h2>
+                    <p className="summary-help">
+                      该汇总展示两个数据集上的整体离线指标，不随当前 User ID 改变。绿色表示同一数据集、同一指标下最优值，红色表示最低值。
+                    </p>
+
+                    {datasets.map((datasetName) => {
+                      const rows = [...(overallMetricRows[datasetName] || [])]
+                        .sort((a, b) => Number(b.ndcg || 0) - Number(a.ndcg || 0))
+                      return (
+                        <div className="dataset-summary" key={datasetName}>
+                          <h3>{datasetName}</h3>
+                          <div className="table-wrap">
+                            <table>
+                              <thead>
+                                <tr>
+                                  <th>Model</th>
+                                  <th>Hit@10</th>
+                                  <th>Precision@10</th>
+                                  <th>Recall@10</th>
+                                  <th>NDCG@10</th>
+                                  <th>MRR@10</th>
+                                  <th>Analysis</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {rows.map((row) => (
+                                  <tr key={`${datasetName}-${row.model}`}>
+                                    <td>{row.model}</td>
+                                    <td className={metricClass(rows, 'hit', row.hit)}>{formatMetric(row.hit)}</td>
+                                    <td className={metricClass(rows, 'precision', row.precision)}>{formatMetric(row.precision)}</td>
+                                    <td className={metricClass(rows, 'recall', row.recall)}>{formatMetric(row.recall)}</td>
+                                    <td className={metricClass(rows, 'ndcg', row.ndcg)}>{formatMetric(row.ndcg)}</td>
+                                    <td className={metricClass(rows, 'mrr', row.mrr)}>{formatMetric(row.mrr)}</td>
+                                    <td className="summary-analysis">{modelSummary(row, rows)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                            {rows.length === 0 && <p className="empty-table">No saved metrics found for {datasetName}.</p>}
+                          </div>
+                        </div>
+                      )
+                    })}
                   </section>
                 </main>
               )}

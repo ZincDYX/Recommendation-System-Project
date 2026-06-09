@@ -358,6 +358,40 @@ body {
   white-space: normal;
 }
 
+.summary-help {
+  margin: -4px 0 18px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.dataset-summary + .dataset-summary {
+  margin-top: 28px;
+}
+
+.dataset-summary h3 {
+  margin: 0 0 10px;
+  color: #111827;
+  font-size: 16px;
+}
+
+.metric-high {
+  color: #047857;
+  font-weight: 900;
+}
+
+.metric-low {
+  color: #dc2626;
+  font-weight: 900;
+}
+
+.summary-analysis {
+  min-width: 220px;
+  color: #334155;
+  line-height: 1.45;
+  white-space: normal;
+}
+
 .empty-table {
   color: #94a3b8;
   margin: 12px 0 0;

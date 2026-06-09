@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import json
 import os
 import re
+import urllib.parse
+import urllib.request
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -25,6 +28,9 @@ PROJECT_ROOT = BACKEND_ROOT.parent
 DATA_ROOT = Path(os.getenv("RECSYS_DATA_ROOT", PROJECT_ROOT / "rec_data"))
 MODEL_ROOT = Path(os.getenv("RECSYS_MODEL_ROOT", BACKEND_ROOT / "saved_models"))
 RESULTS_ROOT = Path(os.getenv("RECSYS_RESULTS_ROOT", BACKEND_ROOT / "results"))
+MOVIE_CACHE_PATH = Path(os.getenv("RECSYS_MOVIE_CACHE_PATH", BACKEND_ROOT / "cache" / "movie_details.json"))
+MOVIE_DETAIL_VERSION = 4
+WIKI_USER_AGENT = os.getenv("RECSYS_WIKI_USER_AGENT", "recomsys-course-demo/1.0")
 ALL_CATEGORY = "All"
 GENRE_KEYWORDS = [
     (
@@ -211,6 +217,30 @@ GENRE_KEYWORDS = [
     ),
 ]
 CATALOG_CATEGORIES = [ALL_CATEGORY, *[genre for genre, _ in GENRE_KEYWORDS], "Other"]
+GENRE_CATEGORY_RULES = [
+    ("Action", ["action", "adventure", "martial arts", "superhero", "spy", "war", "western"]),
+    ("Comedy", ["comedy", "comic", "satire", "parody"]),
+    ("Drama", ["drama", "melodrama", "biographical", "historical", "coming-of-age", "prison", "剧情", "劇情"]),
+    ("Romance", ["romance", "romantic"]),
+    ("Sci-Fi", ["science fiction", "sci-fi", "cyberpunk", "space opera", "dystopian"]),
+    ("Animation", ["animation", "animated", "anime", "动画", "動畫"]),
+    ("Documentary", ["documentary", "docudrama"]),
+    ("Horror", ["horror", "slasher", "supernatural"]),
+    ("Thriller", ["thriller", "mystery", "suspense", "psychological", "惊悚", "驚悚"]),
+    ("Family", ["family", "children", "children's", "musical"]),
+]
+EXTERNAL_GENRE_CATEGORY_RULES = [
+    ("Animation", ["animation", "animated", "anime", "动画", "動畫"]),
+    ("Documentary", ["documentary", "docudrama", "纪录", "紀錄"]),
+    ("Horror", ["horror", "slasher", "supernatural", "恐怖"]),
+    ("Sci-Fi", ["science fiction", "sci-fi", "cyberpunk", "space opera", "dystopian", "科幻"]),
+    ("Comedy", ["comedy", "comic", "satire", "parody", "喜劇", "喜剧", "幽默"]),
+    ("Romance", ["romance", "romantic", "爱情", "愛情"]),
+    ("Drama", ["drama", "melodrama", "biographical", "historical", "coming-of-age", "prison", "剧情", "劇情"]),
+    ("Thriller", ["thriller", "mystery", "suspense", "psychological", "惊悚", "驚悚"]),
+    ("Action", ["action", "adventure", "martial arts", "superhero", "spy", "war", "western", "冒险", "冒險"]),
+    ("Family", ["family", "children", "children's", "家庭", "兒童", "儿童"]),
+]
 
 app = FastAPI(title="Recommendation System API")
 app.add_middleware(
@@ -247,6 +277,254 @@ def cached_model(path: str):
 
 def load_dataset(dataset: str):
     return cached_dataset(str(dataset_dir(dataset)))
+
+
+def read_movie_cache() -> dict[str, Any]:
+    if not MOVIE_CACHE_PATH.exists():
+        return {}
+    try:
+        with MOVIE_CACHE_PATH.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def write_movie_cache(cache: dict[str, Any]) -> None:
+    MOVIE_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with MOVIE_CACHE_PATH.open("w", encoding="utf-8") as f:
+        json.dump(cache, f, ensure_ascii=False, indent=2)
+
+
+def http_json(url: str, params: dict[str, Any] | None = None, timeout: int = 10) -> dict[str, Any]:
+    if params:
+        url = f"{url}?{urllib.parse.urlencode(params)}"
+    request = urllib.request.Request(url, headers={"User-Agent": WIKI_USER_AGENT})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        payload = response.read().decode("utf-8")
+    data = json.loads(payload)
+    return data if isinstance(data, dict) else {}
+
+
+def normalize_movie_title(title: str) -> tuple[str, str]:
+    year_match = re.search(r"\((\d{4})\)", title)
+    year = year_match.group(1) if year_match else ""
+    clean_title = re.sub(r"\s*\([^)]*\)\s*$", "", title).strip()
+    for article in ("The", "A", "An"):
+        suffix = f", {article}"
+        if clean_title.endswith(suffix):
+            clean_title = f"{article} {clean_title[:-len(suffix)]}".strip()
+            break
+    return clean_title, year
+
+
+def likely_non_movie_page(page_title: str) -> bool:
+    normalized = page_title.lower()
+    blocked_terms = [
+        "soundtrack",
+        "franchise",
+        "characters",
+        "list of",
+        "accolades",
+        "video game",
+        "(novel)",
+    ]
+    return any(term in normalized for term in blocked_terms)
+
+
+def likely_movie_summary(summary: dict[str, Any]) -> bool:
+    extract = str(summary.get("extract") or "").lower()
+    if summary.get("type") == "disambiguation":
+        return False
+    return " film" in extract or " movie" in extract or "animated" in extract
+
+
+def wikipedia_search_title(title: str, year: str) -> str | None:
+    search_terms = [f'intitle:"{title}" film', title]
+    if year:
+        search_terms.insert(1, f"{title} {year} film")
+    for search_term in search_terms:
+        data = http_json(
+            "https://en.wikipedia.org/w/api.php",
+            {
+                "action": "query",
+                "list": "search",
+                "srsearch": search_term,
+                "format": "json",
+                "srlimit": 5,
+            },
+        )
+        rows = data.get("query", {}).get("search", [])
+        fallback_title = None
+        for row in rows:
+            page_title = row.get("title")
+            if not page_title or likely_non_movie_page(page_title):
+                continue
+            fallback_title = fallback_title or page_title
+            try:
+                summary = wikipedia_summary("en", page_title)
+            except Exception:
+                continue
+            if likely_movie_summary(summary):
+                return page_title
+        if fallback_title:
+            return fallback_title
+    return None
+
+
+def wikipedia_summary(language: str, page_title: str) -> dict[str, Any]:
+    encoded_title = urllib.parse.quote(page_title.replace(" ", "_"))
+    return http_json(f"https://{language}.wikipedia.org/api/rest_v1/page/summary/{encoded_title}")
+
+
+def wikidata_entity(qid: str) -> dict[str, Any]:
+    data = http_json(
+        "https://www.wikidata.org/w/api.php",
+        {
+            "action": "wbgetentities",
+            "ids": qid,
+            "props": "claims|labels|sitelinks",
+            "languages": "zh|en",
+            "languagefallback": 1,
+            "format": "json",
+        },
+    )
+    return data.get("entities", {}).get(qid, {})
+
+
+def wikidata_label_entities(qids: list[str]) -> dict[str, dict[str, str]]:
+    if not qids:
+        return {}
+    data = http_json(
+        "https://www.wikidata.org/w/api.php",
+        {
+            "action": "wbgetentities",
+            "ids": "|".join(qids),
+            "props": "labels",
+            "languages": "zh|en",
+            "languagefallback": 1,
+            "format": "json",
+        },
+    )
+    labels: dict[str, dict[str, str]] = {}
+    for qid, entity in data.get("entities", {}).items():
+        entity_labels = entity.get("labels", {})
+        labels[qid] = {
+            "zh": entity_labels.get("zh", {}).get("value", ""),
+            "en": entity_labels.get("en", {}).get("value", ""),
+        }
+    return labels
+
+
+def wikidata_genres(entity: dict[str, Any]) -> list[dict[str, str]]:
+    claims = entity.get("claims", {}).get("P136", [])
+    genre_qids = []
+    for claim in claims:
+        value = claim.get("mainsnak", {}).get("datavalue", {}).get("value", {})
+        genre_qid = value.get("id") if isinstance(value, dict) else None
+        if genre_qid:
+            genre_qids.append(genre_qid)
+    labels = wikidata_label_entities(genre_qids[:12])
+    return [
+        {
+            "qid": qid,
+            "label": labels.get(qid, {}).get("zh") or labels.get(qid, {}).get("en") or qid,
+            "label_en": labels.get(qid, {}).get("en") or labels.get(qid, {}).get("zh") or qid,
+        }
+        for qid in genre_qids[:12]
+    ]
+
+
+def category_from_external_genres(genres: list[dict[str, str]], fallback_title: str, summary: str = "") -> str:
+    genre_text = " ".join(
+        f"{genre.get('label', '')} {genre.get('label_en', '')}".lower()
+        for genre in genres
+    )
+    genre_text = f"{genre_text} {summary.lower()}"
+    for category, keywords in EXTERNAL_GENRE_CATEGORY_RULES:
+        if any(keyword in genre_text for keyword in keywords):
+            return category
+    return item_category(fallback_title)
+
+
+def movie_detail_fallback(dataset: str, item_id: str, item_info: dict[str, str]) -> dict[str, Any]:
+    payload = item_payload(dataset, item_id, item_info)
+    return {
+        **payload,
+        "metadata_version": MOVIE_DETAIL_VERSION,
+        "genres": [payload["category"]],
+        "summary": "暂时没有可用的外部电影简介。当前本地数据只包含 item id 和标题。",
+        "source": "Local dataset fallback",
+        "source_url": "",
+        "source_language": "en",
+        "external_found": False,
+    }
+
+
+def fetch_movie_detail(dataset: str, item_id: str, item_info: dict[str, str]) -> dict[str, Any]:
+    title = item_info.get(item_id) or f"Item {item_id}"
+    clean_title, year = normalize_movie_title(title)
+    page_title = wikipedia_search_title(clean_title, year)
+    if not page_title:
+        return movie_detail_fallback(dataset, item_id, item_info)
+
+    en_summary = wikipedia_summary("en", page_title)
+    if en_summary.get("type") == "disambiguation":
+        return movie_detail_fallback(dataset, item_id, item_info)
+
+    qid = en_summary.get("wikibase_item", "")
+    entity = wikidata_entity(qid) if qid else {}
+    genres = wikidata_genres(entity)
+    source_summary = en_summary
+    source_language = "en"
+    zh_title = entity.get("sitelinks", {}).get("zhwiki", {}).get("title")
+    if zh_title:
+        try:
+            zh_summary = wikipedia_summary("zh", zh_title)
+            if zh_summary.get("extract"):
+                source_summary = zh_summary
+                source_language = "zh"
+        except Exception:
+            source_summary = en_summary
+
+    source_url = (
+        source_summary.get("content_urls", {})
+        .get("desktop", {})
+        .get("page", "")
+    )
+    summary_text = source_summary.get("extract") or en_summary.get("extract") or ""
+    category = category_from_external_genres(genres, title, summary_text) if genres else item_category(title)
+    return {
+        **item_payload(dataset, item_id, item_info),
+        "metadata_version": MOVIE_DETAIL_VERSION,
+        "category": category,
+        "genres": [genre["label"] for genre in genres] or [category],
+        "genre_source": "Wikidata" if genres else "title fallback",
+        "summary": summary_text,
+        "source": "Wikipedia / Wikidata",
+        "source_title": source_summary.get("title") or en_summary.get("title") or page_title,
+        "source_url": source_url,
+        "source_language": source_language,
+        "wikidata_id": qid,
+        "external_found": True,
+        "match_query": f"{clean_title} {year}".strip(),
+    }
+
+
+def cached_movie_detail(dataset: str, item_id: str, item_info: dict[str, str]) -> dict[str, Any]:
+    cache_key = f"{dataset}:{item_id}"
+    cache = read_movie_cache()
+    cached = cache.get(cache_key)
+    if isinstance(cached, dict) and cached.get("metadata_version") == MOVIE_DETAIL_VERSION:
+        return cached
+    try:
+        detail = fetch_movie_detail(dataset, item_id, item_info)
+    except Exception:
+        detail = movie_detail_fallback(dataset, item_id, item_info)
+    if detail.get("external_found"):
+        cache[cache_key] = detail
+        write_movie_cache(cache)
+    return detail
 
 
 def available_base_models(dataset: str) -> list[str]:
@@ -678,6 +956,15 @@ def search(dataset: str = Query("MovieLens"), query: str = Query(""), limit: int
     _, _, _, item_info, _ = load_dataset(dataset)
     item_ids = search_item_ids(item_info, query, limit)
     return {"results": [item_payload(dataset, item_id, item_info) for item_id in item_ids]}
+
+
+@app.get("/movie_details")
+def movie_details(dataset: str = Query("MovieLens"), item_id: str = Query(...)):
+    """Return external movie summary and genres for one dataset item."""
+    _, _, _, item_info, _ = load_dataset(dataset)
+    if item_id not in item_info:
+        raise HTTPException(status_code=404, detail=f"Unknown item id: {item_id}")
+    return cached_movie_detail(dataset, item_id, item_info)
 
 
 @app.get("/session_recommend")

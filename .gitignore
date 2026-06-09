@@ -14,6 +14,7 @@ results*/
 checkpoints/
 runs/
 logs/
+backend/cache/
 *.pkl
 *.pt
 *.pth

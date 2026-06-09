@@ -59,6 +59,10 @@ export function searchProducts(dataset, query, limit = 20) {
   return request('/search', { dataset, query, limit })
 }
 
+export function getMovieDetails(dataset, itemId) {
+  return request('/movie_details', { dataset, item_id: itemId })
+}
+
 export function getRecommendations({
   dataset,
   userId,

@@ -10,6 +10,7 @@ import {
 import ProductCard from './components/ProductCard'
 import LoginProfile from './pages/LoginProfile'
 import Cart from './pages/Cart'
+import ProductDetail from './pages/ProductDetail'
 
 import {
   products,
@@ -305,6 +306,7 @@ function App() {
   function handleViewProduct(product) {
     recordSessionItem(product, 'view')
     setSelectedCategory(ALL_CATEGORY)
+    navigate(`/product/${product.dataset || DEFAULT_DATASET}/${encodeURIComponent(productKey(product))}`)
   }
 
   function handleAddToCart(product) {
@@ -711,6 +713,15 @@ function App() {
             <Cart
               items={cartItems}
               onRemove={handleRemoveFromCart}
+            />
+          }
+        />
+
+        <Route
+          path="/product/:dataset/:itemId"
+          element={
+            <ProductDetail
+              onAdd={handleAddToCart}
             />
           }
         />

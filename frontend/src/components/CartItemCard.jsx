@@ -9,12 +9,14 @@ function CartItemCard({
 }) {
   const navigate = useNavigate()
   const title = String(item.name || item.title || item.item_id || item.id)
+  const dataset = item.dataset || 'MovieLens'
+  const itemId = encodeURIComponent(String(item.item_id || item.id))
 
   return (
     <div className="cart-item-card">
       <button
         className="cart-item-image"
-        onClick={() => navigate(`/product/${item.id}`)}
+        onClick={() => navigate(`/product/${dataset}/${itemId}`)}
       >
         {item.image ? (
           <img src={item.image} alt={title} />

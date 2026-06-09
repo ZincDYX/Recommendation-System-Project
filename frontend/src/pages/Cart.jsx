@@ -23,10 +23,6 @@ function Cart({ items = [], onRemove, onClear }) {
     onClear?.()
   }
 
-  const totalPrice = items
-    .filter((item) => selectedIds.includes(item.id))
-    .reduce((sum, item) => sum + Number(item.price || 0), 0)
-
   return (
     <div className="cart-page">
       <h1>Watchlist</h1>
@@ -46,7 +42,7 @@ function Cart({ items = [], onRemove, onClear }) {
       ))}
 
       <div className="cart-summary">
-        <span>Total: ¥{totalPrice}</span>
+        <span>{selectedIds.length} selected · {items.length} in watchlist</span>
         <button type="button" onClick={handleClear}>Clear</button>
       </div>
     </div>

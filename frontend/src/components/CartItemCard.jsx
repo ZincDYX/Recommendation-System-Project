@@ -11,6 +11,9 @@ function CartItemCard({
   const title = String(item.name || item.title || item.item_id || item.id)
   const dataset = item.dataset || 'MovieLens'
   const itemId = encodeURIComponent(String(item.item_id || item.id))
+  const ratingLabel = item.avg_rating
+    ? `★ ${Number(item.avg_rating).toFixed(2)} (${item.rating_count || 0})`
+    : 'No rating'
 
   return (
     <div className="cart-item-card">
@@ -27,7 +30,7 @@ function CartItemCard({
 
       <div className="cart-item-info">
         <h3>{title}</h3>
-        <p>¥{item.price}</p>
+        <p>{ratingLabel}</p>
       </div>
 
       <button

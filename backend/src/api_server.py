@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import csv
-import hashlib
 import json
 import os
 import re
@@ -275,8 +274,31 @@ def cached_model(path: str):
     return load_model(path)
 
 
+@lru_cache(maxsize=8)
+def cached_rating_stats(data_dir: str) -> dict[str, dict[str, float]]:
+    train, _, _, _, _ = cached_dataset(data_dir)
+    totals: dict[str, float] = {}
+    counts: dict[str, int] = {}
+    for rows in train.values():
+        for _, item_id, rating, _ in rows:
+            totals[item_id] = totals.get(item_id, 0.0) + float(rating)
+            counts[item_id] = counts.get(item_id, 0) + 1
+    return {
+        item_id: {
+            "avg_rating": totals[item_id] / count,
+            "rating_count": count,
+        }
+        for item_id, count in counts.items()
+        if count > 0
+    }
+
+
 def load_dataset(dataset: str):
     return cached_dataset(str(dataset_dir(dataset)))
+
+
+def rating_stats(dataset: str) -> dict[str, dict[str, float]]:
+    return cached_rating_stats(str(dataset_dir(dataset)))
 
 
 def read_movie_cache() -> dict[str, Any]:
@@ -516,7 +538,10 @@ def cached_movie_detail(dataset: str, item_id: str, item_info: dict[str, str]) -
     cache = read_movie_cache()
     cached = cache.get(cache_key)
     if isinstance(cached, dict) and cached.get("metadata_version") == MOVIE_DETAIL_VERSION:
-        return cached
+        return {
+            **item_payload(dataset, item_id, item_info),
+            **cached,
+        }
     try:
         detail = fetch_movie_detail(dataset, item_id, item_info)
     except Exception:
@@ -560,12 +585,6 @@ def parse_csv_list(value: str | None) -> list[str]:
     return [part.strip() for part in value.split(",") if part.strip()]
 
 
-def stable_price(item_id: str) -> int:
-    """Generate deterministic display prices for dataset items without prices."""
-    digest = hashlib.md5(item_id.encode("utf-8"), usedforsecurity=False).hexdigest()
-    return 20 + int(digest[:4], 16) % 480
-
-
 def normalize_for_genre(text: str) -> str:
     return f" {re.sub(r'[^a-z0-9]+', ' ', text.lower()).strip()} "
 
@@ -583,6 +602,9 @@ def item_category(title: str) -> str:
 def item_payload(dataset: str, item_id: str, item_info: dict[str, str], score: float | None = None) -> dict[str, Any]:
     """Convert a dataset item into the product shape expected by the frontend."""
     title = item_info.get(item_id) or f"Item {item_id}"
+    stats = rating_stats(dataset).get(item_id, {})
+    avg_rating = stats.get("avg_rating")
+    rating_count = int(stats.get("rating_count", 0))
     payload: dict[str, Any] = {
         "id": item_id,
         "item_id": item_id,
@@ -590,7 +612,9 @@ def item_payload(dataset: str, item_id: str, item_info: dict[str, str], score: f
         "title": title,
         "category": item_category(title),
         "dataset": dataset,
-        "price": stable_price(item_id),
+        "avg_rating": round(float(avg_rating), 2) if avg_rating is not None else None,
+        "rating_count": rating_count,
+        "rating_label": f"{float(avg_rating):.2f} / 5" if avg_rating is not None else "No ratings",
         "description": f"{dataset} item {item_id}",
         "image": "",
     }

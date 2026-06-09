@@ -5,6 +5,9 @@ function ProductCard({ product, onAdd, onView }) {
   const genreLabel = product.genres?.length
     ? product.genres.slice(0, 2).join(' · ')
     : product.category
+  const ratingLabel = product.avg_rating
+    ? `★ ${Number(product.avg_rating).toFixed(2)} (${product.rating_count || 0})`
+    : 'No rating'
 
   return (
     <div
@@ -39,7 +42,7 @@ function ProductCard({ product, onAdd, onView }) {
         )}
 
         <div className="product-bottom">
-          <span className="product-price">¥{product.price}</span>
+          <span className="product-rating">{ratingLabel}</span>
 
           <button
             className="cart-btn"

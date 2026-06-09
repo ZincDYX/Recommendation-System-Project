@@ -23,6 +23,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--itemcf_max_user_history", type=int, default=200)
     parser.add_argument("--itemcf_topk_neighbors", type=int, default=200)
     parser.add_argument("--itemcf_user_recent_k", type=int, default=50)
+    parser.add_argument("--itemcf_pair_window", type=int, default=50)
+    parser.add_argument("--itemcf_pair_tau_days", type=float, default=365.0)
+    parser.add_argument("--itemcf_user_tau_days", type=float, default=180.0)
+    parser.add_argument("--itemcf_rating_power", type=float, default=1.0)
     parser.add_argument("--content_max_features", type=int, default=50000)
     parser.add_argument("--content_max_user_history", type=int, default=80)
 
@@ -56,6 +60,10 @@ def main() -> None:
         "positive_threshold": args.positive_threshold,
         "max_train_rows": args.max_train_rows,
         "max_users": args.max_users,
+        "itemcf_pair_window": args.itemcf_pair_window,
+        "itemcf_pair_tau_days": args.itemcf_pair_tau_days,
+        "itemcf_user_tau_days": args.itemcf_user_tau_days,
+        "itemcf_rating_power": args.itemcf_rating_power,
     }
     (output_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
 

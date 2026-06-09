@@ -22,6 +22,10 @@ param(
     [int]$AmazonItemcfHistory = 50,
     [int]$ItemcfTopkNeighbors = 100,
     [int]$ItemcfUserRecentK = 30,
+    [int]$ItemcfPairWindow = 50,
+    [double]$ItemcfPairTauDays = 365.0,
+    [double]$ItemcfUserTauDays = 180.0,
+    [double]$ItemcfRatingPower = 1.0,
     [int]$ContentMaxFeatures = 30000,
     [int]$ContentMaxUserHistory = 50,
     [int]$Seed = 2026,
@@ -61,6 +65,10 @@ function Invoke-LightweightTraining {
         "--itemcf_max_user_history", "$ItemcfMaxUserHistory",
         "--itemcf_topk_neighbors", "$ItemcfTopkNeighbors",
         "--itemcf_user_recent_k", "$ItemcfUserRecentK",
+        "--itemcf_pair_window", "$ItemcfPairWindow",
+        "--itemcf_pair_tau_days", "$ItemcfPairTauDays",
+        "--itemcf_user_tau_days", "$ItemcfUserTauDays",
+        "--itemcf_rating_power", "$ItemcfRatingPower",
         "--content_max_features", "$ContentMaxFeatures",
         "--content_max_user_history", "$ContentMaxUserHistory"
     )

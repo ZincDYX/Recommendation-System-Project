@@ -16,6 +16,10 @@ Options:
   --amazon-itemcf-history N        Movies_and_TV ItemCF history window. Default: 50.
   --itemcf-topk-neighbors N        ItemCF neighbors per item. Default: 100.
   --itemcf-user-recent-k N         Recent user positives for scoring. Default: 30.
+  --itemcf-pair-window N           Nearby positive items paired per history item. Default: 50.
+  --itemcf-pair-tau-days N         Pair co-occurrence time-decay half scale. Default: 365.
+  --itemcf-user-tau-days N         User recency time-decay half scale. Default: 180.
+  --itemcf-rating-power N          Rating strength exponent. Default: 1.0.
   --content-max-features N         TF-IDF max features. Default: 30000.
   --content-max-user-history N     Content profile history window. Default: 50.
   --seed N                         Random seed. Default: 2026.
@@ -41,6 +45,10 @@ movielens_itemcf_history=50
 amazon_itemcf_history=50
 itemcf_topk_neighbors=100
 itemcf_user_recent_k=30
+itemcf_pair_window=50
+itemcf_pair_tau_days=365
+itemcf_user_tau_days=180
+itemcf_rating_power=1.0
 content_max_features=30000
 content_max_user_history=50
 seed=2026
@@ -75,6 +83,10 @@ while [[ $# -gt 0 ]]; do
     --amazon-itemcf-history) amazon_itemcf_history="$2"; shift 2 ;;
     --itemcf-topk-neighbors) itemcf_topk_neighbors="$2"; shift 2 ;;
     --itemcf-user-recent-k) itemcf_user_recent_k="$2"; shift 2 ;;
+    --itemcf-pair-window) itemcf_pair_window="$2"; shift 2 ;;
+    --itemcf-pair-tau-days) itemcf_pair_tau_days="$2"; shift 2 ;;
+    --itemcf-user-tau-days) itemcf_user_tau_days="$2"; shift 2 ;;
+    --itemcf-rating-power) itemcf_rating_power="$2"; shift 2 ;;
     --content-max-features) content_max_features="$2"; shift 2 ;;
     --content-max-user-history) content_max_user_history="$2"; shift 2 ;;
     --seed) seed="$2"; shift 2 ;;
@@ -112,6 +124,10 @@ run_training() {
     --itemcf_max_user_history "$history_limit"
     --itemcf_topk_neighbors "$itemcf_topk_neighbors"
     --itemcf_user_recent_k "$itemcf_user_recent_k"
+    --itemcf_pair_window "$itemcf_pair_window"
+    --itemcf_pair_tau_days "$itemcf_pair_tau_days"
+    --itemcf_user_tau_days "$itemcf_user_tau_days"
+    --itemcf_rating_power "$itemcf_rating_power"
     --content_max_features "$content_max_features"
     --content_max_user_history "$content_max_user_history"
   )

@@ -11,6 +11,12 @@ from src.model_io import load_model, model_path
 from src.models.ensemble import WeightedEnsemble
 
 
+TUNED_ENSEMBLE_WEIGHTS = {
+    "MovieLens": "popularity=0,itemcf=0.2,content_tfidf=0.2,bpr_mf=0.2,gru4rec=0.4",
+    "Movies_and_TV": "popularity=0,itemcf=0.4,content_tfidf=0,bpr_mf=0.4,gru4rec=0.2",
+}
+
+
 def parse_ensemble_weights(raw_weights: str | None) -> dict[str, float] | None:
     """Parse CLI weights written as comma-separated model=weight pairs."""
     if not raw_weights:
@@ -124,8 +130,9 @@ def main() -> None:
             continue
         models.append(load_model(path))
     if args.include_ensemble and len(models) >= 2:
-        weights = parse_ensemble_weights(args.ensemble_weights)
-        if weights:
+        default_weights = TUNED_ENSEMBLE_WEIGHTS.get(data_dir.name)
+        weights = parse_ensemble_weights(args.ensemble_weights or default_weights)
+        if weights and args.ensemble_weights:
             missing = sorted(set(weights) - {model.name for model in models})
             if missing:
                 raise ValueError(f"Ensemble weights reference unloaded models: {', '.join(missing)}")

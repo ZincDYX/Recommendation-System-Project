@@ -16,6 +16,10 @@ def build_model(name: str, args):
             max_user_history=args.itemcf_max_user_history,
             topk_neighbors=args.itemcf_topk_neighbors,
             user_recent_k=args.itemcf_user_recent_k,
+            pair_window=args.itemcf_pair_window,
+            pair_tau_days=args.itemcf_pair_tau_days,
+            user_tau_days=args.itemcf_user_tau_days,
+            rating_power=args.itemcf_rating_power,
         )
     if name == "content_tfidf":
         return ContentTFIDFRecommender(

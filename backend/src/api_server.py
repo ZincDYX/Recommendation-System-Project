@@ -33,6 +33,10 @@ MOVIE_CACHE_PATH = Path(os.getenv("RECSYS_MOVIE_CACHE_PATH", BACKEND_ROOT / "cac
 MOVIE_DETAIL_VERSION = 4
 WIKI_USER_AGENT = os.getenv("RECSYS_WIKI_USER_AGENT", "recomsys-course-demo/1.0")
 ALL_CATEGORY = "All"
+TUNED_ENSEMBLE_WEIGHTS = {
+    "MovieLens": "popularity=0,itemcf=0.2,content_tfidf=0.2,bpr_mf=0.2,gru4rec=0.4",
+    "Movies_and_TV": "popularity=0,itemcf=0.4,content_tfidf=0,bpr_mf=0.4,gru4rec=0.2",
+}
 GENRE_KEYWORDS = [
     (
         "Action",
@@ -562,16 +566,21 @@ def available_base_models(dataset: str) -> list[str]:
     return [name for name in AVAILABLE_MODELS if name in existing]
 
 
-def load_recommender(dataset: str, model_name: str, raw_weights: str | None = None):
+def load_recommender(
+    dataset: str,
+    model_name: str,
+    raw_weights: str | None = None,
+    session_context_strength: float = 0.0,
+):
     """Resolve a single trained model or build an in-memory weighted ensemble."""
     model_dir = dataset_model_dir(dataset)
     base_model_names = available_base_models(dataset)
     if model_name == "ensemble":
         if len(base_model_names) < 2:
             raise HTTPException(status_code=404, detail="At least two trained models are required for ensemble.")
-        weights = parse_ensemble_weights(raw_weights)
+        weights = parse_ensemble_weights(raw_weights or TUNED_ENSEMBLE_WEIGHTS.get(dataset))
         models = [cached_model(str(model_path(model_dir, name))) for name in base_model_names]
-        return WeightedEnsemble(models, weights=weights)
+        return WeightedEnsemble(models, weights=weights, session_context_strength=session_context_strength)
     if model_name not in base_model_names:
         raise HTTPException(status_code=404, detail=f"Model is not available: {model_name}")
     return cached_model(str(model_path(model_dir, model_name)))
@@ -582,7 +591,8 @@ def load_metric_models(dataset: str):
     base_model_names = available_base_models(dataset)
     base_models = [cached_model(str(model_path(model_dir, name))) for name in base_model_names]
     if len(base_models) >= 2:
-        return [WeightedEnsemble(list(base_models)), *base_models]
+        weights = parse_ensemble_weights(TUNED_ENSEMBLE_WEIGHTS.get(dataset))
+        return [WeightedEnsemble(list(base_models), weights=weights), *base_models]
     return base_models
 
 
@@ -1122,8 +1132,14 @@ def recommend(
 ):
     """Return Top-K recommendations for one user and optional session context."""
     train, valid, _, item_info, _ = load_dataset(dataset)
-    recommender = load_recommender(dataset, model, raw_weights=weights)
     context_item_ids = parse_csv_list(context_items)
+    session_strength = min((len(context_item_ids) / 3.0) + (0.5 if query.strip() else 0.0), 1.0)
+    recommender = load_recommender(
+        dataset,
+        model,
+        raw_weights=weights,
+        session_context_strength=session_strength,
+    )
     excluded = seen_items_for_user(train, valid, user_id=user_id)
     excluded.update(context_item_ids)
 

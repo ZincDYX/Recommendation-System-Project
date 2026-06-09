@@ -10,6 +10,12 @@ function ProductCard({ product, onAdd }) {
       className="product-card"
       onClick={() => navigate(`/product/${product.id}`)}
     >
+      {product.isRecommended && (
+        <span className="recommended-star" aria-label="Recommended" title="Recommended">
+          ★
+        </span>
+      )}
+
       <div className="product-image">
         {product.image ? (
           <img src={product.image} alt={title} />

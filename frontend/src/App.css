@@ -266,6 +266,46 @@ body {
   font-size: 20px;
 }
 
+.sample-user-card {
+  padding-bottom: 18px;
+}
+
+.sample-user-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.sample-user-btn {
+  min-width: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #334155;
+  padding: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sample-user-btn:hover,
+.sample-user-btn.active {
+  border-color: #ef4444;
+  background: #fff1f2;
+}
+
+.sample-user-btn span {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.sample-user-id {
+  color: #111827;
+  font-size: 14px;
+  font-weight: 800;
+}
+
 .metric-guide {
   padding-bottom: 18px;
 }
@@ -326,6 +366,7 @@ body {
 @media (max-width: 920px) {
   .experiment-panel,
   .experiment-grid,
+  .sample-user-grid,
   .metric-guide-list {
     grid-template-columns: 1fr;
   }
@@ -357,6 +398,23 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 24px;
+}
+
+.load-more-btn {
+  display: block;
+  margin: 28px auto 0;
+  border: none;
+  border-radius: 999px;
+  background: #111827;
+  color: white;
+  padding: 12px 22px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.load-more-btn:disabled {
+  cursor: wait;
+  opacity: 0.7;
 }
 
 .empty-card {

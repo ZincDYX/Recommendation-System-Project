@@ -23,6 +23,26 @@ export function getDatasets() {
   return request('/datasets')
 }
 
+export function getCatalogCategories() {
+  return request('/catalog_categories')
+}
+
+export function getItems({
+  dataset,
+  category = 'All',
+  limit = 40,
+  offset = 0,
+  query = '',
+}) {
+  return request('/items', {
+    dataset,
+    category,
+    limit,
+    offset,
+    query,
+  })
+}
+
 export function getModels(dataset) {
   return request('/models', { dataset })
 }

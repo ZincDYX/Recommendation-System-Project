@@ -17,8 +17,10 @@ import {
 } from './data/products'
 
 import {
+  getCatalogCategories,
   getDatasets,
   getHistory,
+  getItems,
   getMetrics,
   getModels,
   getRecommendations,
@@ -27,15 +29,85 @@ import {
 
 const DEFAULT_DATASET = 'MovieLens'
 const DEFAULT_MODEL = 'ensemble'
+const ALL_CATEGORY = 'All'
+const CATALOG_PAGE_SIZE = 40
+const SAMPLE_USERS = {
+  MovieLens: [
+    {
+      userId: '49305',
+      historyCount: 7486,
+      targetRank: 1,
+      targetTitle: 'Grand Budapest Hotel, The (2014)',
+    },
+    {
+      userId: '43703',
+      historyCount: 5782,
+      targetRank: 1,
+      targetTitle: 'Léon: The Professional (1994)',
+    },
+    {
+      userId: '32466',
+      historyCount: 4109,
+      targetRank: 1,
+      targetTitle: 'Supercop (1992)',
+    },
+    {
+      userId: '21011',
+      historyCount: 3579,
+      targetRank: 1,
+      targetTitle: 'Parasite (2019)',
+    },
+  ],
+  Movies_and_TV: [
+    {
+      userId: 'A328S9RN3U5M68',
+      historyCount: 2060,
+      targetRank: 1,
+      targetTitle: 'Thor: The Dark World (Blu-ray)',
+    },
+    {
+      userId: 'A3LZGLA88K0LA0',
+      historyCount: 1688,
+      targetRank: 1,
+      targetTitle: 'A Christmas Carol VHS',
+    },
+    {
+      userId: 'ANCOMAI0I7LVG',
+      historyCount: 1653,
+      targetRank: 1,
+      targetTitle: 'Ant-Man',
+    },
+    {
+      userId: 'A19ZXK9HHVRV1X',
+      historyCount: 1315,
+      targetRank: 1,
+      targetTitle: 'Under The Skin 2014',
+    },
+  ],
+}
 
 function formatMetric(value) {
   return Number(value || 0).toFixed(4)
 }
 
+function productKey(product) {
+  return String(product.item_id || product.id)
+}
+
+function fallbackCatalog(category, query) {
+  const normalizedQuery = query.trim().toLowerCase()
+  return products.filter((product) => {
+    const matchesCategory = category === ALL_CATEGORY || product.category === category
+    const title = String(product.title || product.name || '').toLowerCase()
+    const matchesQuery = !normalizedQuery || title.includes(normalizedQuery)
+    return matchesCategory && matchesQuery
+  })
+}
+
 function App() {
   // Store mode keeps the ecommerce shell; experiment mode exposes model details.
   const [mode, setMode] = useState('store')
-  const [selectedCategory, setSelectedCategory] = useState('Recommended')
+  const [selectedCategory, setSelectedCategory] = useState(ALL_CATEGORY)
   const [profile, setProfile] = useState({
     name: 'Guest User',
     address: 'Beijing, China',
@@ -46,7 +118,14 @@ function App() {
   const [activeQuery, setActiveQuery] = useState('')
   const [contextItems, setContextItems] = useState([])
   const [cartItems, setCartItems] = useState([])
-  const [recommendedProducts, setRecommendedProducts] = useState(products)
+  const [catalogCategories, setCatalogCategories] = useState(categories)
+  const [catalogProducts, setCatalogProducts] = useState([])
+  const [catalogOffset, setCatalogOffset] = useState(0)
+  const [catalogHasMore, setCatalogHasMore] = useState(false)
+  const [catalogTotal, setCatalogTotal] = useState(0)
+  const [catalogLoading, setCatalogLoading] = useState(false)
+  const [catalogMessage, setCatalogMessage] = useState('Loading real catalog...')
+  const [recommendedProducts, setRecommendedProducts] = useState([])
   const [apiMessage, setApiMessage] = useState('Connecting recommendation backend...')
   const [isLoading, setIsLoading] = useState(false)
   const [datasets, setDatasets] = useState([DEFAULT_DATASET])
@@ -70,14 +149,17 @@ function App() {
     Promise.all([
       getDatasets(),
       getUsers(DEFAULT_DATASET, 1),
+      getCatalogCategories(),
     ])
       .then((data) => {
         if (!isMounted) return
         const datasetNames = data[0].datasets || [DEFAULT_DATASET]
         const firstUser = data[1].users?.[0]?.user_id || ''
+        const categoryNames = data[2].categories || categories
         setDatasets(datasetNames.length > 0 ? datasetNames : [DEFAULT_DATASET])
         setUserId(firstUser)
         setExperimentUserId(firstUser)
+        setCatalogCategories(categoryNames.length > 0 ? categoryNames : categories)
       })
       .catch(() => {
         if (!isMounted) return
@@ -101,9 +183,10 @@ function App() {
       .then(([modelData, userData, metricData]) => {
         if (!isMounted) return
         const modelNames = modelData.models || []
+        const datasetSamples = SAMPLE_USERS[experimentDataset] || []
         setExperimentModels(modelNames.length > 0 ? modelNames : [DEFAULT_MODEL])
         setExperimentModel(modelNames.includes(DEFAULT_MODEL) ? DEFAULT_MODEL : modelNames[0] || DEFAULT_MODEL)
-        setExperimentUserId(userData.users?.[0]?.user_id || '')
+        setExperimentUserId(datasetSamples[0]?.userId || userData.users?.[0]?.user_id || '')
         setMetricRows(metricData.metrics || [])
       })
       .catch(() => {
@@ -134,11 +217,11 @@ function App() {
       .then((data) => {
         if (!isMounted) return
         setRecommendedProducts(data.recommendations || [])
-        setApiMessage(`Recommendations for user ${userId}`)
+        setApiMessage(`Recommendations for user ${userId}. Starred items are ranked first.`)
       })
       .catch(() => {
         if (!isMounted) return
-        setRecommendedProducts(products)
+        setRecommendedProducts([])
         setApiMessage('Backend unavailable. Showing local fallback products.')
       })
       .finally(() => {
@@ -150,10 +233,42 @@ function App() {
     }
   }, [activeQuery, contextItems, userId])
 
+  function loadCatalogPage(offset = 0, append = false) {
+    setCatalogLoading(true)
+    return getItems({
+      dataset: DEFAULT_DATASET,
+      category: selectedCategory,
+      limit: CATALOG_PAGE_SIZE,
+      offset,
+      query: activeQuery,
+    })
+      .then((data) => {
+        const pageItems = data.items || []
+        setCatalogProducts((prev) => append ? [...prev, ...pageItems] : pageItems)
+        setCatalogOffset(data.next_offset || 0)
+        setCatalogHasMore(Boolean(data.has_more))
+        setCatalogTotal(data.total || 0)
+        setCatalogMessage(`Showing ${data.next_offset || pageItems.length} of ${data.total || pageItems.length} real ${DEFAULT_DATASET} items.`)
+      })
+      .catch(() => {
+        const fallbackItems = fallbackCatalog(selectedCategory, activeQuery)
+        setCatalogProducts(fallbackItems)
+        setCatalogOffset(fallbackItems.length)
+        setCatalogHasMore(false)
+        setCatalogTotal(fallbackItems.length)
+        setCatalogMessage('Backend catalog unavailable. Showing local fallback items.')
+      })
+      .finally(() => setCatalogLoading(false))
+  }
+
+  useEffect(() => {
+    loadCatalogPage(0, false)
+  }, [activeQuery, selectedCategory])
+
   function handleSearch(event) {
     event.preventDefault()
     setActiveQuery(searchText.trim())
-    setSelectedCategory('Recommended')
+    setSelectedCategory(ALL_CATEGORY)
   }
 
   function handleAddToCart(product) {
@@ -167,12 +282,25 @@ function App() {
       if (!itemId || prev.includes(itemId)) return prev
       return [...prev, itemId]
     })
-    setSelectedCategory('Recommended')
+    setSelectedCategory(ALL_CATEGORY)
   }
 
   function handleRemoveFromCart(id) {
     setCartItems((prev) => prev.filter((item) => item.id !== id))
     setContextItems((prev) => prev.filter((itemId) => itemId !== id))
+  }
+
+  function handleLoadMore() {
+    if (catalogLoading || !catalogHasMore) return
+    loadCatalogPage(catalogOffset, true)
+  }
+
+  function handleSelectSampleUser(sample) {
+    setExperimentUserId(sample.userId)
+    if (experimentModels.includes(DEFAULT_MODEL)) {
+      setExperimentModel(DEFAULT_MODEL)
+    }
+    setExperimentMessage(`已选择示例用户 ${sample.userId}，可直接运行推荐。`)
   }
 
   function handleRunExperiment(event) {
@@ -209,9 +337,26 @@ function App() {
   }
 
   const visibleProducts = useMemo(() => {
-    if (selectedCategory === 'Recommended') return recommendedProducts
-    return products.filter((product) => product.category === selectedCategory)
-  }, [recommendedProducts, selectedCategory])
+    const recommendedMap = new Map(
+      recommendedProducts.map((product) => [
+        productKey(product),
+        {
+          ...product,
+          isRecommended: true,
+        },
+      ])
+    )
+    const matchesCategory = (product) => selectedCategory === ALL_CATEGORY || product.category === selectedCategory
+    const rankedRecommendations = Array.from(recommendedMap.values()).filter(matchesCategory)
+    const regularProducts = catalogProducts
+      .filter((product) => !recommendedMap.has(productKey(product)))
+      .map((product) => ({
+        ...product,
+        isRecommended: false,
+      }))
+    return [...rankedRecommendations, ...regularProducts]
+  }, [catalogProducts, recommendedProducts, selectedCategory])
+  const sampleUsers = useMemo(() => SAMPLE_USERS[experimentDataset] || [], [experimentDataset])
 
   return (
     <div className="page">
@@ -264,7 +409,7 @@ function App() {
               {mode === 'store' ? (
                 <>
                   <nav className="category-scroll">
-                    {categories.map((item) => (
+                    {catalogCategories.map((item) => (
                       <button
                         key={item}
                         className={
@@ -284,6 +429,7 @@ function App() {
                       <div>
                         <h1>{selectedCategory}</h1>
                         <p>{apiMessage}</p>
+                        <p>{catalogMessage}</p>
                       </div>
 
                       <div className="recommendation-meta">
@@ -295,6 +441,7 @@ function App() {
                     </div>
 
                     {isLoading && <div className="status-line">Refreshing recommendations...</div>}
+                    {catalogLoading && <div className="status-line">Loading catalog items...</div>}
 
                     <div className="product-grid">
                       {visibleProducts.map((product, index) => (
@@ -305,6 +452,19 @@ function App() {
                         />
                       ))}
                     </div>
+                    {visibleProducts.length === 0 && (
+                      <div className="empty-card">No catalog items found.</div>
+                    )}
+                    {catalogHasMore && (
+                      <button
+                        className="load-more-btn"
+                        type="button"
+                        disabled={catalogLoading}
+                        onClick={handleLoadMore}
+                      >
+                        {catalogLoading ? 'Loading...' : `Load more (${catalogTotal - catalogOffset} left)`}
+                      </button>
+                    )}
                   </main>
                 </>
               ) : (
@@ -373,6 +533,28 @@ function App() {
                       {experimentLoading ? 'Running...' : 'Run Recommendation'}
                     </button>
                   </form>
+
+                  <section className="experiment-card sample-user-card">
+                    <h2>选择示例用户</h2>
+                    <div className="sample-user-grid">
+                      {sampleUsers.map((sample) => (
+                        <button
+                          key={sample.userId}
+                          type="button"
+                          className={
+                            experimentUserId === sample.userId
+                              ? 'sample-user-btn active'
+                              : 'sample-user-btn'
+                          }
+                          onClick={() => handleSelectSampleUser(sample)}
+                        >
+                          <span className="sample-user-id">{sample.userId}</span>
+                          <span>历史行为 {sample.historyCount} 条</span>
+                          <span>{sample.targetTitle}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
 
                   <section className="experiment-card metric-guide">
                     <h2>数值说明</h2>

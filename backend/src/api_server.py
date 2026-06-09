@@ -25,6 +25,8 @@ PROJECT_ROOT = BACKEND_ROOT.parent
 DATA_ROOT = Path(os.getenv("RECSYS_DATA_ROOT", PROJECT_ROOT / "rec_data"))
 MODEL_ROOT = Path(os.getenv("RECSYS_MODEL_ROOT", BACKEND_ROOT / "saved_models"))
 RESULTS_ROOT = Path(os.getenv("RECSYS_RESULTS_ROOT", BACKEND_ROOT / "results"))
+ALL_CATEGORY = "All"
+CATALOG_CATEGORIES = ["All", "2020s", "2010s", "2000s", "1990s", "Classics", "Other"]
 
 app = FastAPI(title="Recommendation System API")
 app.add_middleware(
@@ -102,6 +104,23 @@ def stable_price(item_id: str) -> int:
     return 20 + int(digest[:4], 16) % 480
 
 
+def item_category(title: str) -> str:
+    """Assign a coarse display category from the title when no genre exists."""
+    years = [int(value) for value in re.findall(r"(?:19|20)\d{2}", title)]
+    if not years:
+        return "Other"
+    year = years[-1]
+    if year >= 2020:
+        return "2020s"
+    if year >= 2010:
+        return "2010s"
+    if year >= 2000:
+        return "2000s"
+    if year >= 1990:
+        return "1990s"
+    return "Classics"
+
+
 def item_payload(dataset: str, item_id: str, item_info: dict[str, str], score: float | None = None) -> dict[str, Any]:
     """Convert a dataset item into the product shape expected by the frontend."""
     title = item_info.get(item_id) or f"Item {item_id}"
@@ -110,7 +129,8 @@ def item_payload(dataset: str, item_id: str, item_info: dict[str, str], score: f
         "item_id": item_id,
         "name": title,
         "title": title,
-        "category": dataset,
+        "category": item_category(title),
+        "dataset": dataset,
         "price": stable_price(item_id),
         "description": f"{dataset} item {item_id}",
         "image": "",
@@ -137,6 +157,34 @@ def search_item_ids(item_info: dict[str, str], query: str, limit: int) -> list[s
             scored.append((overlap, title.lower().find(query.lower()), item_id))
     scored.sort(key=lambda row: (-row[0], row[1] if row[1] >= 0 else 9999, row[2]))
     return [item_id for _, _, item_id in scored[:limit]]
+
+
+def catalog_item_ids(
+    item_info: dict[str, str],
+    all_items: list[str],
+    category: str,
+    query: str,
+) -> list[str]:
+    """Return catalog item ids after display-category and title filters."""
+    query_tokens = tokenize(query)
+    rows = []
+    for item_id in all_items:
+        title = item_info.get(item_id)
+        if not title:
+            continue
+        display_category = item_category(title)
+        if category != ALL_CATEGORY and display_category != category:
+            continue
+        title_tokens = tokenize(title)
+        if query_tokens:
+            overlap = len(query_tokens & title_tokens)
+            if not overlap:
+                continue
+            rows.append((-overlap, title.lower().find(query.lower()), title.lower(), item_id))
+        else:
+            rows.append((0, 0, title.lower(), item_id))
+    rows.sort(key=lambda row: (row[0], row[1] if row[1] >= 0 else 9999, row[2], row[3]))
+    return [item_id for *_, item_id in rows]
 
 
 def context_tokens(item_info: dict[str, str], query: str | None, context_items: list[str]) -> set[str]:
@@ -213,6 +261,39 @@ def datasets() -> dict[str, list[str]]:
         return {"datasets": []}
     names = [path.name for path in DATA_ROOT.iterdir() if (path / "train.txt").exists()]
     return {"datasets": sorted(names)}
+
+
+@app.get("/catalog_categories")
+def catalog_categories() -> dict[str, list[str]]:
+    return {"categories": CATALOG_CATEGORIES}
+
+
+@app.get("/items")
+def items(
+    dataset: str = Query("MovieLens"),
+    category: str = Query(ALL_CATEGORY),
+    limit: int = Query(40, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    query: str = "",
+):
+    """Return a paginated real catalog from dataset item metadata."""
+    if category not in CATALOG_CATEGORIES:
+        raise HTTPException(status_code=400, detail=f"Unknown catalog category: {category}")
+    _, _, _, item_info, all_items = load_dataset(dataset)
+    item_ids = catalog_item_ids(item_info, all_items, category=category, query=query)
+    page_ids = item_ids[offset : offset + limit]
+    next_offset = offset + len(page_ids)
+    return {
+        "dataset": dataset,
+        "category": category,
+        "query": query,
+        "limit": limit,
+        "offset": offset,
+        "next_offset": next_offset,
+        "total": len(item_ids),
+        "has_more": next_offset < len(item_ids),
+        "items": [item_payload(dataset, item_id, item_info) for item_id in page_ids],
+    }
 
 
 @app.get("/models")

@@ -659,8 +659,8 @@ function App() {
         )
         setExperimentMessage(`Recommendations generated for user ${experimentUserId}.`)
       })
-      .catch(() => {
-        setExperimentMessage('Could not load recommendations. Check backend paths and trained models.')
+      .catch((error) => {
+        setExperimentMessage(`Could not load recommendations: ${error.message}`)
       })
       .finally(() => setExperimentLoading(false))
   }

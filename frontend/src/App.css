@@ -173,14 +173,6 @@ body {
   color: #64748b;
 }
 
-.recommendation-toolbar .validation-note {
-  margin-top: 8px;
-  max-width: 760px;
-  color: #334155;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
 .recommendation-meta {
   display: flex;
   flex-wrap: wrap;

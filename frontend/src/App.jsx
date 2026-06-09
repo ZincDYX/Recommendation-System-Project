@@ -462,9 +462,6 @@ function App() {
                         <h1>{selectedCategory}</h1>
                         <p>{apiMessage}</p>
                         <p>{catalogMessage}</p>
-                        <p className="validation-note">
-                          验收看离线指标和星标卡片里的中文推荐证据；genre 是标题关键词标签，不作为推荐正确性的依据。
-                        </p>
                       </div>
 
                       <div className="recommendation-meta">

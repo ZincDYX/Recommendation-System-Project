@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import random
 import re
 import urllib.parse
 import urllib.request
@@ -15,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.data import Histories, load_dataset_dir, seen_items_for_user
 from src.evaluate import parse_ensemble_weights
+from src.metrics import average_metric_rows, ranking_metrics
 from src.model_io import load_model, model_path
 from src.model_registry import AVAILABLE_MODELS
 from src.models.ensemble import WeightedEnsemble
@@ -573,6 +575,64 @@ def load_recommender(dataset: str, model_name: str, raw_weights: str | None = No
     if model_name not in base_model_names:
         raise HTTPException(status_code=404, detail=f"Model is not available: {model_name}")
     return cached_model(str(model_path(model_dir, model_name)))
+
+
+def load_metric_models(dataset: str):
+    model_dir = dataset_model_dir(dataset)
+    base_model_names = available_base_models(dataset)
+    base_models = [cached_model(str(model_path(model_dir, name))) for name in base_model_names]
+    if len(base_models) >= 2:
+        return [WeightedEnsemble(list(base_models)), *base_models]
+    return base_models
+
+
+def sampled_user_eval_cases(
+    train: Histories,
+    valid: Histories,
+    test: Histories,
+    user_id: str,
+    all_items: list[str],
+    positive_threshold: float,
+    num_negatives: int,
+    seed: int,
+) -> list[tuple[str, list[str]]]:
+    rng = random.Random(f"{seed}:{user_id}")
+    item_pool = list(all_items)
+    seen = seen_items_for_user(train, valid, user_id=user_id)
+    cases = []
+    for _, target_item, rating, _ in test.get(user_id, []):
+        if rating < positive_threshold:
+            continue
+        excluded = set(seen)
+        excluded.add(target_item)
+        candidates = [target_item]
+        attempts = 0
+        while len(candidates) < num_negatives + 1 and attempts < (num_negatives + 1) * 20:
+            negative_item = rng.choice(item_pool)
+            attempts += 1
+            if negative_item not in excluded and negative_item not in candidates:
+                candidates.append(negative_item)
+        cases.append((target_item, candidates))
+    return cases
+
+
+def evaluate_user_model(model, train: Histories, valid: Histories, user_id: str, cases, k: int) -> dict[str, float]:
+    metric_rows = []
+    seen = seen_items_for_user(train, valid, user_id=user_id)
+    for target_item, candidates in cases:
+        exclude_for_ranking = set(seen)
+        exclude_for_ranking.discard(target_item)
+        ranked = [
+            item
+            for item, _ in model.recommend(
+                user_id,
+                k=k,
+                exclude_items=exclude_for_ranking,
+                candidate_items=candidates,
+            )
+        ]
+        metric_rows.append(ranking_metrics(ranked, {target_item}, k))
+    return average_metric_rows(metric_rows)
 
 
 def tokenize(text: str) -> set[str]:
@@ -1136,3 +1196,61 @@ def metrics(
             )
     rows.sort(key=lambda row: row["ndcg"], reverse=True)
     return {"metrics": rows, "path": str(path)}
+
+
+@app.get("/user_metrics")
+def user_metrics(
+    dataset: str = Query("MovieLens"),
+    user_id: str = Query(...),
+    label: str = Query("pos4", pattern="^(all|pos4)$"),
+    negative_count: int = Query(100, ge=1),
+    k: int = Query(10, ge=1),
+    seed: int = Query(2026),
+):
+    """Evaluate all available models on one user's positive test targets."""
+    positive_threshold = 4.0 if label == "pos4" else 0.0
+    train, valid, test, _, all_items = load_dataset(dataset)
+    if user_id not in train and user_id not in valid and user_id not in test:
+        raise HTTPException(status_code=404, detail=f"Unknown user id: {user_id}")
+    cases = sampled_user_eval_cases(
+        train=train,
+        valid=valid,
+        test=test,
+        user_id=user_id,
+        all_items=all_items,
+        positive_threshold=positive_threshold,
+        num_negatives=negative_count,
+        seed=seed,
+    )
+    rows = []
+    if cases:
+        for model in load_metric_models(dataset):
+            metrics_for_model = evaluate_user_model(
+                model=model,
+                train=train,
+                valid=valid,
+                user_id=user_id,
+                cases=cases,
+                k=k,
+            )
+            rows.append(
+                {
+                    "model": model.name,
+                    "k": k,
+                    "hit": float(metrics_for_model.get("hit", 0.0)),
+                    "precision": float(metrics_for_model.get("precision", 0.0)),
+                    "recall": float(metrics_for_model.get("recall", 0.0)),
+                    "ndcg": float(metrics_for_model.get("ndcg", 0.0)),
+                    "mrr": float(metrics_for_model.get("mrr", 0.0)),
+                }
+            )
+    rows.sort(key=lambda row: row["ndcg"], reverse=True)
+    return {
+        "dataset": dataset,
+        "user_id": user_id,
+        "k": k,
+        "negative_count": negative_count,
+        "positive_threshold": positive_threshold,
+        "test_case_count": len(cases),
+        "metrics": rows,
+    }

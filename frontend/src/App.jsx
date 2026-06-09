@@ -29,6 +29,7 @@ import {
   getRecommendations,
   getSessionRecommendations,
   getUser,
+  getUserMetrics,
   getUsers,
 } from './api/api'
 
@@ -181,6 +182,7 @@ function App() {
   const [historyRows, setHistoryRows] = useState([])
   const [experimentRecommendations, setExperimentRecommendations] = useState([])
   const [metricRows, setMetricRows] = useState([])
+  const [metricMessage, setMetricMessage] = useState('Run a recommendation to compute user-specific offline metrics.')
   const [overallMetricRows, setOverallMetricRows] = useState({})
   const [experimentMessage, setExperimentMessage] = useState('Load a real dataset user to inspect recommendations.')
   const [experimentLoading, setExperimentLoading] = useState(false)
@@ -227,9 +229,8 @@ function App() {
     Promise.all([
       getModels(experimentDataset),
       getUsers(experimentDataset, 1),
-      getMetrics(experimentDataset, 'pos4', 100, 10),
     ])
-      .then(([modelData, userData, metricData]) => {
+      .then(([modelData, userData]) => {
         if (!isMounted) return
         const modelNames = modelData.models || []
         const datasetSamples = SAMPLE_USERS[experimentDataset] || []
@@ -244,7 +245,8 @@ function App() {
             ? profile.userId
             : datasetSamples[0]?.userId || userData.users?.[0]?.user_id || ''
         )
-        setMetricRows(metricData.metrics || [])
+        setMetricRows([])
+        setMetricMessage('Run a recommendation to compute user-specific offline metrics.')
       })
       .catch(() => {
         if (!isMounted) return
@@ -557,6 +559,8 @@ function App() {
       setExperimentUserId('')
       setHistoryRows([])
       setExperimentRecommendations([])
+      setMetricRows([])
+      setMetricMessage('tester has no dataset test cases for offline metrics.')
       setExperimentMessage('tester has no dataset history. Use Store actions to create session context.')
       setLoginMessage('Logged in as tester. This account has no dataset history.')
       setLoginLoading(false)
@@ -579,6 +583,8 @@ function App() {
         setExperimentUserId(account.user_id)
         setHistoryRows([])
         setExperimentRecommendations([])
+        setMetricRows([])
+        setMetricMessage('Run a recommendation to compute user-specific offline metrics.')
         setExperimentMessage(`Logged in dataset user ${account.user_id}. Run recommendations to inspect this user.`)
         setLoginMessage(`Logged in as ${account.user_id}.`)
       })
@@ -603,6 +609,8 @@ function App() {
     setExperimentUserId('')
     setHistoryRows([])
     setExperimentRecommendations([])
+    setMetricRows([])
+    setMetricMessage('Run a recommendation to compute user-specific offline metrics.')
     setLoginMessage('Use a dataset user ID with password 0, or tester / 0 for an empty account.')
   }
 
@@ -611,7 +619,9 @@ function App() {
     if (experimentModels.includes(DEFAULT_MODEL)) {
       setExperimentModel(DEFAULT_MODEL)
     }
-    setExperimentMessage(`已选择示例用户 ${sample.userId}，可直接运行推荐。`)
+    setMetricRows([])
+    setMetricMessage('Run a recommendation to compute user-specific offline metrics.')
+    setExperimentMessage(`Selected sample user ${sample.userId}. Run recommendations to inspect this user.`)
   }
 
   function handleRunExperiment(event) {
@@ -635,12 +645,18 @@ function App() {
         query: activeQuery,
         contextItems,
       }),
-      getMetrics(experimentDataset, 'pos4', 100, 10),
+      getUserMetrics(experimentDataset, experimentUserId, 'pos4', 100, 10),
     ])
-      .then(([historyData, recommendationData, metricData]) => {
+      .then(([historyData, recommendationData, userMetricData]) => {
         setHistoryRows(historyData.history || [])
         setExperimentRecommendations(recommendationData.recommendations || [])
-        setMetricRows(metricData.metrics || [])
+        setMetricRows(userMetricData.metrics || [])
+        const caseCount = userMetricData.test_case_count || 0
+        setMetricMessage(
+          caseCount > 0
+            ? `Computed on ${caseCount} positive test case${caseCount === 1 ? '' : 's'} for user ${experimentUserId}.`
+            : `No positive test cases found for user ${experimentUserId} under Pos4.`
+        )
         setExperimentMessage(`Recommendations generated for user ${experimentUserId}.`)
       })
       .catch(() => {
@@ -828,7 +844,11 @@ function App() {
                       Dataset
                       <select
                         value={experimentDataset}
-                        onChange={(event) => setExperimentDataset(event.target.value)}
+                        onChange={(event) => {
+                          setExperimentDataset(event.target.value)
+                          setMetricRows([])
+                          setMetricMessage('Run a recommendation to compute user-specific offline metrics.')
+                        }}
                       >
                         {datasets.map((dataset) => (
                           <option key={dataset} value={dataset}>{dataset}</option>
@@ -840,7 +860,11 @@ function App() {
                       User ID
                       <input
                         value={experimentUserId}
-                        onChange={(event) => setExperimentUserId(event.target.value)}
+                        onChange={(event) => {
+                          setExperimentUserId(event.target.value)
+                          setMetricRows([])
+                          setMetricMessage('Run a recommendation to compute user-specific offline metrics.')
+                        }}
                         placeholder="Enter a dataset user id"
                       />
                     </label>
@@ -875,7 +899,7 @@ function App() {
                   </form>
 
                   <section className="experiment-card sample-user-card">
-                    <h2>选择示例用户</h2>
+                    <h2>Sample Users</h2>
                     <div className="sample-user-grid">
                       {sampleUsers.map((sample) => (
                         <button
@@ -889,7 +913,7 @@ function App() {
                           onClick={() => handleSelectSampleUser(sample)}
                         >
                           <span className="sample-user-id">{sample.userId}</span>
-                          <span>历史行为 {sample.historyCount} 条</span>
+                          <span>{sample.historyCount} history records</span>
                           <span>{sample.targetTitle}</span>
                         </button>
                       ))}
@@ -897,13 +921,13 @@ function App() {
                   </section>
 
                   <section className="experiment-card metric-guide">
-                    <h2>数值说明</h2>
+                    <h2>Metric Guide</h2>
                     <div className="metric-guide-list">
-                      <p><strong>Algorithm score</strong>：当前算法给出的排序分数，分数越高表示在同一次请求、同一算法下排序越靠前；它不是点击概率。</p>
-                      <p><strong>Hit@10 / Recall@10</strong>：当前 leave-one-out 评测中，Top-10 命中唯一正例即为 1，否则为 0，因此两者数值相同。</p>
-                      <p><strong>Precision@10</strong>：Top-10 中正例占比；当前协议每个样本只有 1 个正例，所以理论上限是 0.1。</p>
-                      <p><strong>NDCG@10</strong>：衡量相关物品是否排在更靠前的位置，越高说明排序质量越好。</p>
-                      <p><strong>MRR@10</strong>：关注第一个相关结果出现的位置，越靠前分数越高。</p>
+                      <p><strong>Algorithm score</strong>: the ranking score produced by the selected model for the current request. It is not a click probability.</p>
+                      <p><strong>Hit@10 / Recall@10</strong>: whether the relevant test item appears in Top-10. With one positive target per case, the two values are identical.</p>
+                      <p><strong>Precision@10</strong>: the fraction of relevant items in Top-10. With one positive target, the maximum value is 0.1.</p>
+                      <p><strong>NDCG@10</strong>: rewards ranking the relevant item near the top. Higher means better ranking quality.</p>
+                      <p><strong>MRR@10</strong>: reciprocal rank of the first relevant result. Higher means the first hit appears earlier.</p>
                     </div>
                   </section>
 
@@ -966,7 +990,8 @@ function App() {
                   </div>
 
                   <section className="experiment-card">
-                    <h2>Offline Metrics, Pos4, 100 Negatives, K=10</h2>
+                    <h2>User-Specific Offline Metrics, Pos4, 100 Negatives, K=10</h2>
+                    <p className="metric-status">{metricMessage}</p>
                     <div className="table-wrap">
                       <table>
                         <thead>
@@ -992,14 +1017,12 @@ function App() {
                           ))}
                         </tbody>
                       </table>
+                      {metricRows.length === 0 && <p className="empty-table">Run a recommendation to compute metrics for the current user.</p>}
                     </div>
                   </section>
 
                   <section className="experiment-card overall-summary-card">
                     <h2>Overall Algorithm Performance Summary</h2>
-                    <p className="summary-help">
-                      该汇总展示两个数据集上的整体离线指标，不随当前 User ID 改变。绿色表示同一数据集、同一指标下最优值，红色表示最低值。
-                    </p>
 
                     {datasets.map((datasetName) => {
                       const rows = [...(overallMetricRows[datasetName] || [])]

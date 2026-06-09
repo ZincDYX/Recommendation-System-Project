@@ -923,11 +923,11 @@ function App() {
                   <section className="experiment-card metric-guide">
                     <h2>Metric Guide</h2>
                     <div className="metric-guide-list">
-                      <p><strong>Algorithm score</strong>: the ranking score produced by the selected model for the current request. It is not a click probability.</p>
-                      <p><strong>Hit@10 / Recall@10</strong>: whether the relevant test item appears in Top-10. With one positive target per case, the two values are identical.</p>
-                      <p><strong>Precision@10</strong>: the fraction of relevant items in Top-10. With one positive target, the maximum value is 0.1.</p>
-                      <p><strong>NDCG@10</strong>: rewards ranking the relevant item near the top. Higher means better ranking quality.</p>
-                      <p><strong>MRR@10</strong>: reciprocal rank of the first relevant result. Higher means the first hit appears earlier.</p>
+                      <p><strong>Algorithm score</strong>：当前算法给出的排序分数，分数越高表示在同一次请求、同一算法下排序越靠前；它不是点击概率。</p>
+                      <p><strong>Hit@10 / Recall@10</strong>：衡量真实相关 item 是否出现在 Top-10 中。当前每个测试样本只有一个正例，所以两者数值相同。</p>
+                      <p><strong>Precision@10</strong>：Top-10 中相关 item 的占比。当前每个测试样本只有一个正例，所以理论上限是 0.1。</p>
+                      <p><strong>NDCG@10</strong>：衡量相关 item 是否排在更靠前的位置，越高说明排序质量越好。</p>
+                      <p><strong>MRR@10</strong>：第一个相关结果排名的倒数，越高表示第一个命中结果越靠前。</p>
                     </div>
                   </section>
 

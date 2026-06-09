@@ -51,6 +51,10 @@ export function getUsers(dataset, limit = 20, query = '') {
   return request('/users', { dataset, limit, query })
 }
 
+export function getUser(dataset, userId) {
+  return request('/user', { dataset, user_id: userId })
+}
+
 export function getHistory(dataset, userId, limit = 20) {
   return request('/history', { dataset, user_id: userId, limit })
 }

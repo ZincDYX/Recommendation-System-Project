@@ -27,6 +27,7 @@ import {
   getMovieDetails,
   getRecommendations,
   getSessionRecommendations,
+  getUser,
   getUsers,
 } from './api/api'
 
@@ -34,6 +35,8 @@ const DEFAULT_DATASET = 'MovieLens'
 const DEFAULT_MODEL = 'ensemble'
 const ALL_CATEGORY = 'All'
 const CATALOG_PAGE_SIZE = 40
+const TESTER_USER_ID = 'tester'
+const LOGIN_PASSWORD = '0'
 const SAMPLE_USERS = {
   MovieLens: [
     {
@@ -119,6 +122,11 @@ function App() {
     name: 'Guest User',
     address: 'Beijing, China',
     avatar: '',
+    isLoggedIn: false,
+    isTester: false,
+    userId: 'guest',
+    dataset: DEFAULT_DATASET,
+    historyCount: 0,
   })
   const [searchText, setSearchText] = useState('')
   const [activeQuery, setActiveQuery] = useState('')
@@ -148,9 +156,15 @@ function App() {
   const [metricRows, setMetricRows] = useState([])
   const [experimentMessage, setExperimentMessage] = useState('Load a real dataset user to inspect recommendations.')
   const [experimentLoading, setExperimentLoading] = useState(false)
+  const [loginMessage, setLoginMessage] = useState('Use a dataset user ID with password 0, or tester / 0 for an empty account.')
+  const [loginLoading, setLoginLoading] = useState(false)
 
   const navigate = useNavigate()
   const genreFetchesRef = useRef(new Set())
+  const storeDataset = profile.dataset || DEFAULT_DATASET
+  const storeUserId = profile.isLoggedIn ? profile.userId : 'guest'
+  const storeUserLabel = profile.isLoggedIn ? profile.name : 'Guest user'
+  const isDatasetUser = profile.isLoggedIn && !profile.isTester
 
   useEffect(() => {
     // Load catalog metadata; store mode intentionally starts as a cold guest.
@@ -191,9 +205,17 @@ function App() {
         if (!isMounted) return
         const modelNames = modelData.models || []
         const datasetSamples = SAMPLE_USERS[experimentDataset] || []
+        const loggedInDatasetUser = profile.isLoggedIn && !profile.isTester && profile.dataset === experimentDataset
+        const loggedInTester = profile.isLoggedIn && profile.isTester && profile.dataset === experimentDataset
         setExperimentModels(modelNames.length > 0 ? modelNames : [DEFAULT_MODEL])
         setExperimentModel(modelNames.includes(DEFAULT_MODEL) ? DEFAULT_MODEL : modelNames[0] || DEFAULT_MODEL)
-        setExperimentUserId(datasetSamples[0]?.userId || userData.users?.[0]?.user_id || '')
+        setExperimentUserId(
+          loggedInTester
+            ? ''
+            : loggedInDatasetUser
+            ? profile.userId
+            : datasetSamples[0]?.userId || userData.users?.[0]?.user_id || ''
+        )
         setMetricRows(metricData.metrics || [])
       })
       .catch(() => {
@@ -204,30 +226,42 @@ function App() {
     return () => {
       isMounted = false
     }
-  }, [experimentDataset])
+  }, [experimentDataset, profile.dataset, profile.isLoggedIn, profile.isTester, profile.userId])
 
   useEffect(() => {
-    // Storefront recommendations only use cold-start guest session signals.
+    // Storefront recommendations combine immutable dataset history with local session signals.
     const hasSessionSignals = activeQuery || contextItems.length > 0
-    if (!hasSessionSignals) {
+    if (!hasSessionSignals && !isDatasetUser) {
       setRecommendedProducts([])
-      setApiMessage(`Guest user · session history ${sessionEvents.length} actions. Click movies or add them to your watchlist to start recommendations.`)
+      setApiMessage(`${storeUserLabel} · session history ${sessionEvents.length} actions. Click movies or add them to your watchlist to start recommendations.`)
       return
     }
 
     let isMounted = true
     setIsLoading(true)
 
-    getSessionRecommendations({
-      dataset: DEFAULT_DATASET,
-      topk: 12,
-      query: activeQuery,
-      contextItems,
-    })
+    const recommendationRequest = isDatasetUser
+      ? getRecommendations({
+          dataset: storeDataset,
+          userId: storeUserId,
+          model: DEFAULT_MODEL,
+          topk: 12,
+          query: activeQuery,
+          contextItems,
+        })
+      : getSessionRecommendations({
+          dataset: storeDataset,
+          topk: 12,
+          query: activeQuery,
+          contextItems,
+        })
+
+    recommendationRequest
       .then((data) => {
         if (!isMounted) return
         setRecommendedProducts(data.recommendations || [])
-        setApiMessage(`Guest user · ${sessionEvents.length} session actions. Starred items are ranked first.`)
+        const historyLabel = isDatasetUser ? `${profile.historyCount} dataset history items` : 'empty dataset history'
+        setApiMessage(`${storeUserLabel} · ${historyLabel} · ${sessionEvents.length} session actions. Starred items are ranked first.`)
       })
       .catch(() => {
         if (!isMounted) return
@@ -241,13 +275,22 @@ function App() {
     return () => {
       isMounted = false
     }
-  }, [activeQuery, contextItems, sessionEvents.length])
+  }, [
+    activeQuery,
+    contextItems,
+    isDatasetUser,
+    profile.historyCount,
+    sessionEvents.length,
+    storeDataset,
+    storeUserId,
+    storeUserLabel,
+  ])
 
   function loadCatalogPage(offset = 0, append = false) {
     setCatalogLoading(true)
     setGenreMessage('')
     return getItems({
-      dataset: DEFAULT_DATASET,
+      dataset: storeDataset,
       category: selectedCategory,
       limit: CATALOG_PAGE_SIZE,
       offset,
@@ -259,7 +302,7 @@ function App() {
         setCatalogOffset(data.next_offset || 0)
         setCatalogHasMore(Boolean(data.has_more))
         setCatalogTotal(data.total || 0)
-        setCatalogMessage(`Showing ${data.next_offset || pageItems.length} of ${data.total || pageItems.length} real ${DEFAULT_DATASET} items.`)
+        setCatalogMessage(`Showing ${data.next_offset || pageItems.length} of ${data.total || pageItems.length} real ${storeDataset} items.`)
       })
       .catch(() => {
         const fallbackItems = fallbackCatalog(selectedCategory, activeQuery)
@@ -274,7 +317,7 @@ function App() {
 
   useEffect(() => {
     loadCatalogPage(0, false)
-  }, [activeQuery, selectedCategory])
+  }, [activeQuery, selectedCategory, storeDataset])
 
   useEffect(() => {
     const productsToEnrich = new Map()
@@ -344,6 +387,7 @@ function App() {
         },
         ...prev,
       ])
+      syncExperimentToLoggedInUser()
     }
     setSelectedCategory(ALL_CATEGORY)
   }
@@ -360,6 +404,7 @@ function App() {
       },
       ...prev,
     ])
+    syncExperimentToLoggedInUser()
     setContextItems((prev) => {
       if (prev.includes(itemId)) return prev
       return [itemId, ...prev].slice(0, 20)
@@ -398,6 +443,100 @@ function App() {
     loadCatalogPage(catalogOffset, true)
   }
 
+  function resetSessionState() {
+    setSearchText('')
+    setActiveQuery('')
+    setContextItems([])
+    setSessionEvents([])
+    setCartItems([])
+    setRecommendedProducts([])
+    setSelectedCategory(ALL_CATEGORY)
+  }
+
+  function syncExperimentToLoggedInUser() {
+    if (!isDatasetUser) return
+    setExperimentDataset(profile.dataset)
+    setExperimentUserId(profile.userId)
+  }
+
+  function handleLogin({ dataset, userId, password }) {
+    const normalizedUserId = userId.trim()
+    if (!normalizedUserId) {
+      setLoginMessage('Enter a user ID before logging in.')
+      return
+    }
+    if (password !== LOGIN_PASSWORD) {
+      setLoginMessage('Invalid password. This demo uses password 0 for every account.')
+      return
+    }
+
+    setLoginLoading(true)
+    setLoginMessage('Checking dataset user...')
+
+    if (normalizedUserId.toLowerCase() === TESTER_USER_ID) {
+      resetSessionState()
+      setProfile((current) => ({
+        ...current,
+        name: 'tester',
+        isLoggedIn: true,
+        isTester: true,
+        userId: TESTER_USER_ID,
+        dataset: DEFAULT_DATASET,
+        historyCount: 0,
+      }))
+      setExperimentDataset(DEFAULT_DATASET)
+      setExperimentUserId('')
+      setHistoryRows([])
+      setExperimentRecommendations([])
+      setExperimentMessage('tester has no dataset history. Use Store actions to create session context.')
+      setLoginMessage('Logged in as tester. This account has no dataset history.')
+      setLoginLoading(false)
+      return
+    }
+
+    getUser(dataset, normalizedUserId)
+      .then((account) => {
+        resetSessionState()
+        setProfile((current) => ({
+          ...current,
+          name: `User ${account.user_id}`,
+          isLoggedIn: true,
+          isTester: false,
+          userId: account.user_id,
+          dataset: account.dataset,
+          historyCount: account.history_count,
+        }))
+        setExperimentDataset(account.dataset)
+        setExperimentUserId(account.user_id)
+        setHistoryRows([])
+        setExperimentRecommendations([])
+        setExperimentMessage(`Logged in dataset user ${account.user_id}. Run recommendations to inspect this user.`)
+        setLoginMessage(`Logged in as ${account.user_id}.`)
+      })
+      .catch(() => {
+        setLoginMessage('Unknown user ID for the selected dataset.')
+      })
+      .finally(() => setLoginLoading(false))
+  }
+
+  function handleLogout() {
+    resetSessionState()
+    setProfile((current) => ({
+      ...current,
+      name: 'Guest User',
+      isLoggedIn: false,
+      isTester: false,
+      userId: 'guest',
+      dataset: DEFAULT_DATASET,
+      historyCount: 0,
+    }))
+    setExperimentDataset(DEFAULT_DATASET)
+    setExperimentUserId('')
+    setHistoryRows([])
+    setExperimentRecommendations([])
+    setLoginMessage('Use a dataset user ID with password 0, or tester / 0 for an empty account.')
+  }
+
   function handleSelectSampleUser(sample) {
     setExperimentUserId(sample.userId)
     if (experimentModels.includes(DEFAULT_MODEL)) {
@@ -424,6 +563,8 @@ function App() {
         userId: experimentUserId,
         model: experimentModel,
         topk: experimentTopK,
+        query: activeQuery,
+        contextItems,
       }),
       getMetrics(experimentDataset, 'pos4', 100, 10),
     ])
@@ -557,9 +698,9 @@ function App() {
                       </div>
 
                       <div className="recommendation-meta">
-                        <span>Guest user</span>
-                        <span>{DEFAULT_DATASET}</span>
-                        <span>session</span>
+                        <span>{storeUserLabel}</span>
+                        <span>{storeDataset}</span>
+                        <span>{isDatasetUser ? DEFAULT_MODEL : 'session'}</span>
                         {activeQuery && <span>Query: {activeQuery}</span>}
                         <span>{sessionEvents.length} actions</span>
                       </div>
@@ -793,6 +934,11 @@ function App() {
               profile={profile}
               setProfile={setProfile}
               sessionEvents={sessionEvents}
+              datasets={datasets}
+              onLogin={handleLogin}
+              onLogout={handleLogout}
+              loginMessage={loginMessage}
+              loginLoading={loginLoading}
             />
           }
         />

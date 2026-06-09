@@ -957,6 +957,19 @@ def users(dataset: str = Query("MovieLens"), limit: int = Query(20, ge=1, le=500
     }
 
 
+@app.get("/user")
+def user(dataset: str = Query("MovieLens"), user_id: str = Query(...)):
+    """Return one exact dataset user without modifying any interaction files."""
+    train, _, _, _, _ = load_dataset(dataset)
+    if user_id not in train:
+        raise HTTPException(status_code=404, detail=f"Unknown user id: {user_id}")
+    return {
+        "dataset": dataset,
+        "user_id": user_id,
+        "history_count": len(train[user_id]),
+    }
+
+
 @app.get("/history")
 def history(dataset: str = Query("MovieLens"), user_id: str = Query(...), limit: int = Query(20, ge=1, le=200)):
     train, _, _, item_info, _ = load_dataset(dataset)

@@ -1,5 +1,7 @@
 # Personalized Recommendation System
 
+（该readme由AI辅助生成）
+
 这是“个性化推荐系统”大作业代码框架，包含数据读取、多个推荐算法、Top-N 评测、命令行推荐、FastAPI 推荐接口、React 前端和 Streamlit 备用 UI。
 代码默认支持 sampled leave-one-out，并允许用 `--positive_threshold` 切换“所有测试交互”与“高分正例”两种设置。
 

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import CartItemCard from '../components/CartItemCard'
 import './Cart.css'
 
-function Cart({ items = [], onRemove }) {
+function Cart({ items = [], onRemove, onClear }) {
   const [selectedIds, setSelectedIds] = useState([])
 
   function handleToggleSelect(id) {
@@ -18,16 +18,21 @@ function Cart({ items = [], onRemove }) {
     onRemove?.(id)
   }
 
+  function handleClear() {
+    setSelectedIds([])
+    onClear?.()
+  }
+
   const totalPrice = items
     .filter((item) => selectedIds.includes(item.id))
     .reduce((sum, item) => sum + Number(item.price || 0), 0)
 
   return (
     <div className="cart-page">
-      <h1>Shopping Cart</h1>
+      <h1>Watchlist</h1>
 
       {items.length === 0 && (
-        <div className="empty-cart">No items have been added yet.</div>
+        <div className="empty-cart">No movies have been added to the watchlist yet.</div>
       )}
 
       {items.map((item) => (
@@ -42,7 +47,7 @@ function Cart({ items = [], onRemove }) {
 
       <div className="cart-summary">
         <span>Total: ¥{totalPrice}</span>
-        <button>Checkout</button>
+        <button type="button" onClick={handleClear}>Clear</button>
       </div>
     </div>
   )

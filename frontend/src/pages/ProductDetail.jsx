@@ -82,7 +82,7 @@ function ProductDetail({ onAdd }) {
 
           {detail && (
             <button className="detail-add-btn" type="button" onClick={() => onAdd?.(detail)}>
-              Add
+              Watchlist
             </button>
           )}
         </div>

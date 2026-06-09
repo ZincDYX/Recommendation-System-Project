@@ -211,7 +211,7 @@ function App() {
     const hasSessionSignals = activeQuery || contextItems.length > 0
     if (!hasSessionSignals) {
       setRecommendedProducts([])
-      setApiMessage(`Guest user · session history ${sessionEvents.length} actions. Click or add items to start recommendations.`)
+      setApiMessage(`Guest user · session history ${sessionEvents.length} actions. Click movies or add them to your watchlist to start recommendations.`)
       return
     }
 
@@ -373,7 +373,7 @@ function App() {
   }
 
   function handleAddToCart(product) {
-    // Adding a product is treated as a session signal for reranking.
+    // Adding a movie to the watchlist is treated as a session signal for reranking.
     setCartItems((prev) => {
       if (prev.some((item) => item.id === product.id)) return prev
       return [...prev, product]
@@ -385,6 +385,12 @@ function App() {
   function handleRemoveFromCart(id) {
     setCartItems((prev) => prev.filter((item) => item.id !== id))
     setContextItems((prev) => prev.filter((itemId) => itemId !== id))
+  }
+
+  function handleClearWatchlist() {
+    const watchlistIds = new Set(cartItems.map((item) => productKey(item)))
+    setCartItems([])
+    setContextItems((prev) => prev.filter((itemId) => !watchlistIds.has(itemId)))
   }
 
   function handleLoadMore() {
@@ -791,6 +797,7 @@ function App() {
             <Cart
               items={cartItems}
               onRemove={handleRemoveFromCart}
+              onClear={handleClearWatchlist}
             />
           }
         />

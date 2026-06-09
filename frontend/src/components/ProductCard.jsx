@@ -48,7 +48,7 @@ function ProductCard({ product, onAdd, onView }) {
               onAdd?.(product)
             }}
           >
-            Add
+            Watchlist
           </button>
         </div>
       </div>

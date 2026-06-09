@@ -6,6 +6,7 @@ function ProductCard({ product, onAdd, onView }) {
   const ratingLabel = product.avg_rating
     ? `★ ${Number(product.avg_rating).toFixed(2)}`
     : 'No rating'
+  const isInWatchlist = Boolean(product.isInWatchlist)
 
   return (
     <div
@@ -43,13 +44,16 @@ function ProductCard({ product, onAdd, onView }) {
           <span className="product-rating">{ratingLabel}</span>
 
           <button
-            className="cart-btn"
+            className={isInWatchlist ? 'cart-btn added' : 'cart-btn'}
+            aria-pressed={isInWatchlist}
+            aria-disabled={isInWatchlist}
             onClick={(event) => {
               event.stopPropagation()
+              if (isInWatchlist) return
               onAdd?.(product)
             }}
           >
-            Watchlist
+            {isInWatchlist ? 'Added' : 'Watchlist'}
           </button>
         </div>
       </div>

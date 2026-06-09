@@ -419,8 +419,10 @@ function App() {
 
   function handleAddToCart(product) {
     // Adding a movie to the watchlist is treated as a session signal for reranking.
+    const itemId = productKey(product)
+    if (cartItems.some((item) => productKey(item) === itemId)) return
     setCartItems((prev) => {
-      if (prev.some((item) => item.id === product.id)) return prev
+      if (prev.some((item) => productKey(item) === itemId)) return prev
       return [...prev, product]
     })
     recordSessionItem(product, 'add')
@@ -580,6 +582,11 @@ function App() {
       .finally(() => setExperimentLoading(false))
   }
 
+  const watchlistItemIds = useMemo(
+    () => new Set(cartItems.map((item) => productKey(item))),
+    [cartItems]
+  )
+
   const visibleProducts = useMemo(() => {
     const productCategory = (product) => product.displayCategory || product.externalCategory || product.category
     const enrichProduct = (product) => {
@@ -601,6 +608,7 @@ function App() {
     const enrichedRecommendations = recommendedProducts.map((product) => ({
       ...enrichProduct(product),
       isRecommended: true,
+      isInWatchlist: watchlistItemIds.has(productKey(product)),
     }))
     const recommendedMap = new Map(
       enrichedRecommendations.map((product) => [
@@ -617,9 +625,10 @@ function App() {
       .map((product) => ({
         ...product,
         isRecommended: false,
+        isInWatchlist: watchlistItemIds.has(productKey(product)),
       }))
     return [...rankedRecommendations, ...regularProducts]
-  }, [catalogProducts, recommendedProducts, selectedCategory, movieDetailsById])
+  }, [catalogProducts, recommendedProducts, selectedCategory, movieDetailsById, watchlistItemIds])
   const sampleUsers = useMemo(() => SAMPLE_USERS[experimentDataset] || [], [experimentDataset])
 
   return (

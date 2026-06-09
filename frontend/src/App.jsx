@@ -24,6 +24,7 @@ import {
   getMetrics,
   getModels,
   getRecommendations,
+  getSessionRecommendations,
   getUsers,
 } from './api/api'
 
@@ -113,10 +114,10 @@ function App() {
     address: 'Beijing, China',
     avatar: '',
   })
-  const [userId, setUserId] = useState('')
   const [searchText, setSearchText] = useState('')
   const [activeQuery, setActiveQuery] = useState('')
   const [contextItems, setContextItems] = useState([])
+  const [sessionEvents, setSessionEvents] = useState([])
   const [cartItems, setCartItems] = useState([])
   const [catalogCategories, setCatalogCategories] = useState(categories)
   const [catalogProducts, setCatalogProducts] = useState([])
@@ -143,22 +144,18 @@ function App() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    // Load the first real dataset user for an immediately usable demo.
+    // Load catalog metadata; store mode intentionally starts as a cold guest.
     let isMounted = true
 
     Promise.all([
       getDatasets(),
-      getUsers(DEFAULT_DATASET, 1),
       getCatalogCategories(),
     ])
       .then((data) => {
         if (!isMounted) return
         const datasetNames = data[0].datasets || [DEFAULT_DATASET]
-        const firstUser = data[1].users?.[0]?.user_id || ''
-        const categoryNames = data[2].categories || categories
+        const categoryNames = data[1].categories || categories
         setDatasets(datasetNames.length > 0 ? datasetNames : [DEFAULT_DATASET])
-        setUserId(firstUser)
-        setExperimentUserId(firstUser)
         setCatalogCategories(categoryNames.length > 0 ? categoryNames : categories)
         setSelectedCategory((current) => categoryNames.includes(current) ? current : ALL_CATEGORY)
       })
@@ -201,16 +198,19 @@ function App() {
   }, [experimentDataset])
 
   useEffect(() => {
-    // Storefront recommendations react to search text and cart context.
-    if (!userId) return
+    // Storefront recommendations only use cold-start guest session signals.
+    const hasSessionSignals = activeQuery || contextItems.length > 0
+    if (!hasSessionSignals) {
+      setRecommendedProducts([])
+      setApiMessage(`Guest user · session history ${sessionEvents.length} actions. Click or add items to start recommendations.`)
+      return
+    }
 
     let isMounted = true
     setIsLoading(true)
 
-    getRecommendations({
+    getSessionRecommendations({
       dataset: DEFAULT_DATASET,
-      userId,
-      model: DEFAULT_MODEL,
       topk: 12,
       query: activeQuery,
       contextItems,
@@ -218,12 +218,12 @@ function App() {
       .then((data) => {
         if (!isMounted) return
         setRecommendedProducts(data.recommendations || [])
-        setApiMessage(`Recommendations for user ${userId}. Starred items are ranked first.`)
+        setApiMessage(`Guest user · ${sessionEvents.length} session actions. Starred items are ranked first.`)
       })
       .catch(() => {
         if (!isMounted) return
         setRecommendedProducts([])
-        setApiMessage('Backend unavailable. Showing local fallback products.')
+        setApiMessage('Session recommender unavailable. Showing the real catalog without starred items.')
       })
       .finally(() => {
         if (isMounted) setIsLoading(false)
@@ -232,7 +232,7 @@ function App() {
     return () => {
       isMounted = false
     }
-  }, [activeQuery, contextItems, userId])
+  }, [activeQuery, contextItems, sessionEvents.length])
 
   function loadCatalogPage(offset = 0, append = false) {
     setCatalogLoading(true)
@@ -268,21 +268,52 @@ function App() {
 
   function handleSearch(event) {
     event.preventDefault()
-    setActiveQuery(searchText.trim())
+    const query = searchText.trim()
+    setActiveQuery(query)
+    if (query) {
+      setSessionEvents((prev) => [
+        {
+          action: 'search',
+          itemId: '',
+          title: query,
+          timestamp: Date.now(),
+        },
+        ...prev,
+      ])
+    }
+    setSelectedCategory(ALL_CATEGORY)
+  }
+
+  function recordSessionItem(product, action) {
+    const itemId = product.item_id || product.id
+    if (!itemId) return
+    setSessionEvents((prev) => [
+      {
+        action,
+        itemId,
+        title: product.title || product.name || itemId,
+        timestamp: Date.now(),
+      },
+      ...prev,
+    ])
+    setContextItems((prev) => {
+      if (prev.includes(itemId)) return prev
+      return [itemId, ...prev].slice(0, 20)
+    })
+  }
+
+  function handleViewProduct(product) {
+    recordSessionItem(product, 'view')
     setSelectedCategory(ALL_CATEGORY)
   }
 
   function handleAddToCart(product) {
     // Adding a product is treated as a session signal for reranking.
-    const itemId = product.item_id || product.id
     setCartItems((prev) => {
       if (prev.some((item) => item.id === product.id)) return prev
       return [...prev, product]
     })
-    setContextItems((prev) => {
-      if (!itemId || prev.includes(itemId)) return prev
-      return [...prev, itemId]
-    })
+    recordSessionItem(product, 'add')
     setSelectedCategory(ALL_CATEGORY)
   }
 
@@ -434,10 +465,11 @@ function App() {
                       </div>
 
                       <div className="recommendation-meta">
+                        <span>Guest user</span>
                         <span>{DEFAULT_DATASET}</span>
-                        <span>{DEFAULT_MODEL}</span>
+                        <span>session</span>
                         {activeQuery && <span>Query: {activeQuery}</span>}
-                        {contextItems.length > 0 && <span>{contextItems.length} cart signals</span>}
+                        <span>{sessionEvents.length} actions</span>
                       </div>
                     </div>
 
@@ -449,6 +481,7 @@ function App() {
                         <ProductCard
                           key={`${product.id}-${index}`}
                           product={product}
+                          onView={handleViewProduct}
                           onAdd={handleAddToCart}
                         />
                       ))}
@@ -667,6 +700,7 @@ function App() {
             <LoginProfile
               profile={profile}
               setProfile={setProfile}
+              sessionEvents={sessionEvents}
             />
           }
         />

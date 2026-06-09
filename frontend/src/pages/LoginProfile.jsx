@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import './LoginProfile.css'
 
-function LoginProfile({ profile, setProfile }) {
+function LoginProfile({ profile, setProfile, sessionEvents = [] }) {
   const [isEditing, setIsEditing] = useState(false)
 
   function handleChange(event) {
@@ -95,17 +95,18 @@ function LoginProfile({ profile, setProfile }) {
         </div>
 
         <div className="profile-info">
-          <h3>Order History</h3>
+          <h3>Session Activity</h3>
 
-          <div className="order-item">
-            <span>Casual Hoodie</span>
-            <span>¥129</span>
-          </div>
+          {sessionEvents.length === 0 && (
+            <p>No store activity has been recorded in this session.</p>
+          )}
 
-          <div className="order-item">
-            <span>Sport Shoes</span>
-            <span>¥299</span>
-          </div>
+          {sessionEvents.slice(0, 10).map((event) => (
+            <div className="order-item" key={`${event.timestamp}-${event.action}-${event.itemId}`}>
+              <span>{event.title}</span>
+              <span>{event.action}</span>
+            </div>
+          ))}
         </div>
       </section>
     </div>

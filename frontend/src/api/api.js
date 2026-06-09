@@ -80,6 +80,20 @@ export function getRecommendations({
   })
 }
 
+export function getSessionRecommendations({
+  dataset,
+  topk = 12,
+  query = '',
+  contextItems = [],
+}) {
+  return request('/session_recommend', {
+    dataset,
+    topk,
+    query,
+    context_items: contextItems.join(','),
+  })
+}
+
 export function getMetrics(dataset, label = 'pos4', negativeCount = 100, k = 10) {
   return request('/metrics', {
     dataset,

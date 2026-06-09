@@ -345,9 +345,11 @@ def catalog_item_ids(
     all_items: list[str],
     category: str,
     query: str,
+    popularity_scores: dict[str, float] | None = None,
 ) -> list[str]:
     """Return catalog item ids after display-category and title filters."""
     query_tokens = tokenize(query)
+    popularity_scores = popularity_scores or {}
     rows = []
     for item_id in all_items:
         title = item_info.get(item_id)
@@ -357,15 +359,28 @@ def catalog_item_ids(
         if category != ALL_CATEGORY and display_category != category:
             continue
         title_tokens = tokenize(title)
+        popularity = float(popularity_scores.get(item_id, 0.0))
         if query_tokens:
             overlap = len(query_tokens & title_tokens)
             if not overlap:
                 continue
-            rows.append((-overlap, title.lower().find(query.lower()), title.lower(), item_id))
+            rows.append((-overlap, -popularity, catalog_sort_title(title), item_id))
         else:
-            rows.append((0, 0, title.lower(), item_id))
-    rows.sort(key=lambda row: (row[0], row[1] if row[1] >= 0 else 9999, row[2], row[3]))
+            rows.append((-popularity, 0, catalog_sort_title(title), item_id))
+    rows.sort(key=lambda row: (row[0], row[1], row[2], row[3]))
     return [item_id for *_, item_id in rows]
+
+
+def catalog_sort_title(title: str) -> str:
+    """Sort catalog titles by readable words instead of leading symbols."""
+    normalized = title.lower().strip()
+    normalized = re.sub(r"^[^a-z0-9]+", "", normalized).strip()
+    normalized = re.sub(r"^(the|a|an)\s+", "", normalized).strip()
+    normalized = re.sub(r"^[^a-z0-9]+", "", normalized).strip()
+    if not normalized:
+        return f"2:{title.lower()}"
+    prefix = "0" if normalized[0].isalpha() else "1"
+    return f"{prefix}:{normalized}"
 
 
 def context_tokens(item_info: dict[str, str], query: str | None, context_items: list[str]) -> set[str]:
@@ -391,6 +406,137 @@ def rerank_with_context(
     return sorted(reranked, key=lambda row: (-row[1], row[0]))
 
 
+def normalized_component(scores: dict[str, float], candidates: set[str]) -> dict[str, float]:
+    values = [scores.get(item_id, 0.0) for item_id in candidates]
+    if not values:
+        return {}
+    min_score = min(values)
+    max_score = max(values)
+    denom = max_score - min_score
+    if denom <= 1e-12:
+        return {item_id: 0.0 for item_id in candidates}
+    return {item_id: (scores.get(item_id, 0.0) - min_score) / denom for item_id in candidates}
+
+
+def collect_session_candidates(
+    dataset: str,
+    item_info: dict[str, str],
+    all_items: list[str],
+    context_item_ids: list[str],
+    query: str,
+) -> set[str]:
+    candidates: set[str] = set()
+    model_dir = dataset_model_dir(dataset)
+
+    if query.strip():
+        candidates.update(search_item_ids(item_info, query, limit=1500))
+
+    itemcf_path = model_path(model_dir, "itemcf")
+    if itemcf_path.exists():
+        itemcf = cached_model(str(itemcf_path))
+        for item_id in context_item_ids:
+            candidates.update(neighbor for neighbor, _ in getattr(itemcf, "similar_items", {}).get(item_id, [])[:600])
+
+    for item_id in context_item_ids:
+        title = item_info.get(item_id, "")
+        if title:
+            candidates.update(search_item_ids(item_info, title, limit=300))
+
+    popularity_path = model_path(model_dir, "popularity")
+    if popularity_path.exists():
+        popularity = cached_model(str(popularity_path))
+        popular_items = sorted(
+            getattr(popularity, "item_scores", {}).items(),
+            key=lambda row: (-row[1], row[0]),
+        )
+        candidates.update(item_id for item_id, _ in popular_items[:800])
+
+    if not candidates:
+        candidates.update(all_items[:1000])
+    return {item_id for item_id in candidates if item_id in item_info and item_id not in context_item_ids}
+
+
+def content_session_scores(dataset: str, context_item_ids: list[str], candidate_ids: set[str]) -> dict[str, float]:
+    content_path = model_path(dataset_model_dir(dataset), "content_tfidf")
+    if not content_path.exists() or not context_item_ids:
+        return {}
+    content_model = cached_model(str(content_path))
+    if getattr(content_model, "item_matrix", None) is None:
+        return {}
+    item_to_idx = getattr(content_model, "item_to_idx", {})
+    hist_indices = [item_to_idx[item_id] for item_id in context_item_ids if item_id in item_to_idx]
+    if not hist_indices:
+        return {}
+    known = [(item_id, item_to_idx[item_id]) for item_id in candidate_ids if item_id in item_to_idx]
+    if not known:
+        return {}
+
+    import numpy as np
+
+    profile = content_model.item_matrix[hist_indices].sum(axis=0)
+    candidate_matrix = content_model.item_matrix[[idx for _, idx in known]]
+    raw_scores = np.asarray(candidate_matrix @ profile.T).ravel()
+    return {item_id: float(score) for (item_id, _), score in zip(known, raw_scores)}
+
+
+def itemcf_session_scores(dataset: str, context_item_ids: list[str], candidate_ids: set[str]) -> dict[str, float]:
+    itemcf_path = model_path(dataset_model_dir(dataset), "itemcf")
+    if not itemcf_path.exists() or not context_item_ids:
+        return {}
+    itemcf = cached_model(str(itemcf_path))
+    scores = {item_id: 0.0 for item_id in candidate_ids}
+    for context_item_id in context_item_ids:
+        for neighbor, score in getattr(itemcf, "similar_items", {}).get(context_item_id, []):
+            if neighbor in candidate_ids:
+                scores[neighbor] += float(score)
+    return scores
+
+
+def popularity_session_scores(dataset: str, candidate_ids: set[str]) -> dict[str, float]:
+    popularity_path = model_path(dataset_model_dir(dataset), "popularity")
+    if not popularity_path.exists():
+        return {}
+    popularity = cached_model(str(popularity_path))
+    item_scores = getattr(popularity, "item_scores", {})
+    return {item_id: float(item_scores.get(item_id, 0.0)) for item_id in candidate_ids}
+
+
+def title_session_scores(item_info: dict[str, str], context_item_ids: list[str], query: str, candidate_ids: set[str]) -> dict[str, float]:
+    tokens = context_tokens(item_info, query, context_item_ids)
+    if not tokens:
+        return {}
+    return {
+        item_id: float(len(tokens & tokenize(item_info.get(item_id, ""))))
+        for item_id in candidate_ids
+    }
+
+
+def session_recommend_items(
+    dataset: str,
+    item_info: dict[str, str],
+    all_items: list[str],
+    context_item_ids: list[str],
+    query: str,
+    topk: int,
+) -> list[tuple[str, float]]:
+    """Recommend for a brand-new guest from current-session item signals."""
+    if not context_item_ids and not query.strip():
+        return []
+    candidate_ids = collect_session_candidates(dataset, item_info, all_items, context_item_ids, query)
+    components = [
+        (1.0, content_session_scores(dataset, context_item_ids, candidate_ids)),
+        (0.9, itemcf_session_scores(dataset, context_item_ids, candidate_ids)),
+        (0.35, title_session_scores(item_info, context_item_ids, query, candidate_ids)),
+        (0.2, popularity_session_scores(dataset, candidate_ids)),
+    ]
+    combined = {item_id: 0.0 for item_id in candidate_ids}
+    for weight, raw_scores in components:
+        for item_id, score in normalized_component(raw_scores, candidate_ids).items():
+            combined[item_id] += weight * score
+    ranked = sorted(combined.items(), key=lambda row: (-row[1], catalog_sort_title(item_info.get(row[0], row[0])), row[0]))
+    return ranked[:topk]
+
+
 def model_reason(model_name: str) -> str:
     reasons = {
         "popularity": "该物品在训练集中整体热度较高，适合作为热门推荐结果。",
@@ -399,6 +545,7 @@ def model_reason(model_name: str) -> str:
         "bpr_mf": "BPR 矩阵分解模型预测该用户对该物品的隐式偏好得分较高。",
         "gru4rec": "GRU4Rec 根据用户近期行为序列预测该物品可能符合下一步兴趣。",
         "ensemble": "融合模型综合了热门度、协同过滤、内容相似和深度模型信号后给出较高排序。",
+        "session": "该物品根据本次会话中的点击、加购和搜索信号实时推荐。",
     }
     return reasons.get(model_name, "该物品在当前算法排序中得分较高，因此被推荐。")
 
@@ -461,7 +608,17 @@ def items(
     if category not in CATALOG_CATEGORIES:
         raise HTTPException(status_code=400, detail=f"Unknown catalog category: {category}")
     _, _, _, item_info, all_items = load_dataset(dataset)
-    item_ids = catalog_item_ids(item_info, all_items, category=category, query=query)
+    popularity_scores = {}
+    popularity_path = model_path(dataset_model_dir(dataset), "popularity")
+    if popularity_path.exists():
+        popularity_scores = getattr(cached_model(str(popularity_path)), "item_scores", {})
+    item_ids = catalog_item_ids(
+        item_info,
+        all_items,
+        category=category,
+        query=query,
+        popularity_scores=popularity_scores,
+    )
     page_ids = item_ids[offset : offset + limit]
     next_offset = offset + len(page_ids)
     return {
@@ -521,6 +678,52 @@ def search(dataset: str = Query("MovieLens"), query: str = Query(""), limit: int
     _, _, _, item_info, _ = load_dataset(dataset)
     item_ids = search_item_ids(item_info, query, limit)
     return {"results": [item_payload(dataset, item_id, item_info) for item_id in item_ids]}
+
+
+@app.get("/session_recommend")
+def session_recommend(
+    dataset: str = Query("MovieLens"),
+    topk: int = Query(10, ge=1, le=50),
+    query: str = "",
+    context_items: str | None = None,
+):
+    """Return cold-start guest recommendations from current-session signals."""
+    _, _, _, item_info, all_items = load_dataset(dataset)
+    context_item_ids = [
+        item_id
+        for item_id in parse_csv_list(context_items)
+        if item_id in item_info
+    ]
+    recs = session_recommend_items(
+        dataset=dataset,
+        item_info=item_info,
+        all_items=all_items,
+        context_item_ids=context_item_ids,
+        query=query,
+        topk=topk,
+    )
+    return {
+        "dataset": dataset,
+        "user_id": "guest",
+        "model": "session",
+        "recommendations": [
+            {
+                "rank": rank,
+                **item_payload(dataset, item_id, item_info, score),
+                "score_label": f"Session score: {score:.4f}",
+                "reason": explanation_for_item(
+                    model_name="session",
+                    item_id=item_id,
+                    item_info=item_info,
+                    train={},
+                    user_id="guest",
+                    query=query,
+                    context_item_ids=context_item_ids,
+                ),
+            }
+            for rank, (item_id, score) in enumerate(recs, start=1)
+        ],
+    }
 
 
 @app.get("/recommend")

@@ -1,14 +1,12 @@
 import './ProductCard.css'
-import { useNavigate } from 'react-router-dom'
 
-function ProductCard({ product, onAdd }) {
-  const navigate = useNavigate()
+function ProductCard({ product, onAdd, onView }) {
   const title = String(product.name || product.title || product.item_id || product.id)
 
   return (
     <div
       className="product-card"
-      onClick={() => navigate(`/product/${product.id}`)}
+      onClick={() => onView?.(product)}
     >
       {product.isRecommended && (
         <span className="recommended-star" aria-label="Recommended" title="Recommended">
